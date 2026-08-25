@@ -1,0 +1,13 @@
+18:38:01 - Starting Python Eye Tracker...
+18:38:01 - UDP Socket created on 127.0.0.1:5005
+18:38:05 - Webcam opened successfully. Waiting for frames...
+18:38:06 - SUCCESS! First packet sent successfully to MATLAB!
+18:38:16 - Still running smoothly. Sent 300 frames so far.
+18:38:26 - Still running smoothly. Sent 600 frames so far.
+18:38:39 - Still running smoothly. Sent 900 frames so far.
+18:38:51 - Still running smoothly. Sent 1200 frames so far.
+18:38:59 - Warning: Camera is active, but I cannot see a face. Please make sure your face is well-lit and in frame!
+18:39:03 - Still running smoothly. Sent 1500 frames so far.
+18:39:05 - Warning: Camera is active, but I cannot see a face. Please make sure your face is well-lit and in frame!
+18:39:08 - Warning: Camera is active, but I cannot see a face. Please make sure your face is well-lit and in frame!
+18:39:09 - Warning: Camera is active, but I cannot see a face. Please make sure your face is well-lit and in frame!
