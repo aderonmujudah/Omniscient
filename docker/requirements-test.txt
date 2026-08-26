@@ -1,0 +1,7 @@
+mediapipe==1.0.1
+opencv-python-headless==5.0.0.93
+numpy==2.5.2
+websockets==13.0
+pytest==8.3.2
+jsonschema==4.21.1
+pytest-asyncio==0.23.5

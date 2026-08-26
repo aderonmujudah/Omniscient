@@ -1,0 +1,10 @@
+version: '3.8'
+services:
+  test-harness:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    volumes:
+      - ../:/app
+    environment:
+      - PYTHONPATH=/app

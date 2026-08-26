@@ -1,0 +1,65 @@
+{
+  "$schema": "http://json-schema.org/draft-07/schema#",
+  "title": "GazeSample",
+  "type": "object",
+  "properties": {
+    "t": {
+      "type": "number",
+      "description": "Monotonic seconds at frame capture"
+    },
+    "seq": {
+      "type": "integer",
+      "description": "Monotonically increasing sequence number"
+    },
+    "ok": {
+      "type": "boolean",
+      "description": "Face detected this frame"
+    },
+    "condition": {
+      "type": ["string", "null"],
+      "description": "Optional condition string, e.g. 'low_light'"
+    },
+    "eyes": {
+      "type": "object",
+      "properties": {
+        "left": { "$ref": "#/definitions/EyeGeometry" },
+        "right": { "$ref": "#/definitions/EyeGeometry" }
+      },
+      "required": ["left", "right"]
+    },
+    "ear": {
+      "type": "object",
+      "properties": {
+        "left": { "type": "number" },
+        "right": { "type": "number" }
+      },
+      "required": ["left", "right"]
+    },
+    "ipd_px": {
+      "type": "number"
+    },
+    "conf": {
+      "type": "number"
+    }
+  },
+  "required": ["t", "seq", "ok"],
+  "definitions": {
+    "Point2D": {
+      "type": "array",
+      "items": { "type": "number" },
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "EyeGeometry": {
+      "type": "object",
+      "properties": {
+        "iris": { "$ref": "#/definitions/Point2D" },
+        "inner": { "$ref": "#/definitions/Point2D" },
+        "outer": { "$ref": "#/definitions/Point2D" },
+        "top": { "$ref": "#/definitions/Point2D" },
+        "bottom": { "$ref": "#/definitions/Point2D" }
+      },
+      "required": ["iris", "inner", "outer", "top", "bottom"]
+    }
+  }
+}
