@@ -8,13 +8,13 @@ logger = logging.getLogger(__name__)
 PROFILE_PATH = os.path.expanduser("~/.omniscient/profile.json")
 
 # The mean error threshold in degrees, above which a profile is rejected.
-# This is a tunable parameter that depends on the actual measured accuracy on real 
-# hardware (S2b). A threshold in degrees cannot be correctly set while the 
-# focal length and accuracy measurement itself remain assumed.
-# 5.0 degrees is used as a placeholder.
+# Placeholder value. A threshold in degrees cannot be set correctly until gaze accuracy
+# has been measured on real hardware with an established camera focal length; until then
+# both the focal length and the accuracy figure it produces are assumptions.
 VALIDATION_ERROR_THRESHOLD_DEG = 5.0
 
-def save_profile(profile: Dict[str, Any], path: str = PROFILE_PATH, mean_error_deg: float = 0.0, has_measured_distance: bool = True) -> bool:
+def save_profile(profile: Dict[str, Any], path: str = PROFILE_PATH, *,
+                 mean_error_deg: float, has_measured_distance: bool) -> bool:
     """
     Saves the profile if the validation error is within acceptable limits.
     Returns True if saved, False if rejected.

@@ -55,7 +55,8 @@ def test_calibration_end_to_end_and_validation(tmp_path):
     
     # Profile should save since synthetic error is very low
     p = str(tmp_path / "profile.json")
-    saved = save_profile({"model": model.to_dict()}, p, mean_err)
+    saved = save_profile({"model": model.to_dict()}, p, mean_error_deg=mean_err,
+                         has_measured_distance=has_measured)
     assert saved
     assert os.path.exists(p)
 
@@ -77,7 +78,8 @@ def test_deliberately_corrupted_calibration(tmp_path):
     assert mean_err > 50.0 # Huge error in degrees
     
     p = str(tmp_path / "corrupted_profile.json")
-    saved = save_profile({"model": model.to_dict()}, p, mean_err)
+    saved = save_profile({"model": model.to_dict()}, p, mean_error_deg=mean_err,
+                         has_measured_distance=has_measured)
     
     assert not saved # Profile storage is gated and rejected
     assert not os.path.exists(p)
@@ -128,7 +130,7 @@ def test_profile_persistence(tmp_path):
     }
     
     p = str(tmp_path / "profile.json")
-    save_profile(profile, p, mean_error_deg=1.0)
+    save_profile(profile, p, mean_error_deg=1.0, has_measured_distance=True)
     
     loaded = load_profile(p)
     model2 = CalibrationModel()
@@ -371,3 +373,60 @@ def test_absent_ipd_is_refused(tmp_path):
     assert saved is False
     import os
     assert not os.path.exists(p)
+
+
+def test_absent_frame_width_is_refused(tmp_path):
+    """
+    A session whose samples never carried a capture width cannot yield a viewing
+    distance, so its accuracy figure is not a measurement and must not be stored.
+    This is the case for any recording made before the width was captured.
+    """
+    from engine.calibration.session import CalibrationSession
+    from engine.calibration.model import CalibrationModel
+    from engine.calibration.validation import validate_calibration
+    from engine.calibration.store import save_profile
+    from engine.sources.base import GazeSample, EyeGeometry, Point2D
+
+    session = CalibrationSession(1920, 1080)
+    session.start()
+
+    t = 1000.0
+    session.process_sample(GazeSample(t=t, seq=1, ok=True))
+    t += 0.4
+
+    # A healthy IPD throughout, but no sample declares the width it was captured at.
+    for i in range(12):
+        geom = {"left": EyeGeometry(Point2D(0,0), Point2D(0,0), Point2D(100,0), Point2D(0,-20), Point2D(0,20)),
+                "right": EyeGeometry(Point2D(0,0), Point2D(0,0), Point2D(100,0), Point2D(0,-20), Point2D(0,20))}
+        session.process_sample(GazeSample(t=t, seq=2+i, ok=True, eyes=geom, ipd_px=120.0))
+        t += 1/60.0
+
+    # The session saw a usable IPD on every sample but never learned the capture width.
+    assert session.get_frame_width() is None
+
+    model = CalibrationModel()
+    model.coeffs_x = [1.0] * 6
+    model.coeffs_y = [1.0] * 6
+
+    # A healthy IPD cannot rescue an unknown width: both are needed for a distance.
+    mean_err, worst_err, points, has_measured = validate_calibration(
+        model, [(0.5, 0.5)], [(100, 100)], 120.0,
+        session.get_frame_width(), 1920, 1080, 597.0
+    )
+
+    assert has_measured is False
+
+    p = str(tmp_path / "no_width_profile.json")
+    assert save_profile({"model": model.to_dict()}, p, mean_error_deg=1.0,
+                        has_measured_distance=has_measured) is False
+    assert not os.path.exists(p)
+
+
+def test_harness_reports_measured_distance_from_fixture():
+    """
+    The replay fixture declares the width it was captured at, so the harness must
+    report a genuine measurement rather than falling back to an assumed distance.
+    """
+    res = run_accuracy_harness(FIXTURE_PATH, 1920, 1080, 597.0)
+    assert res is not None
+    assert res["has_measured_distance"] is True

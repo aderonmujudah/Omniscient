@@ -174,7 +174,8 @@ class CalibrationSession:
         return sum(valid_ipds) / len(valid_ipds)
         
     def get_frame_width(self):
-        return self.frame_width if self.frame_width is not None else 640
+        """Returns the capture width, or None if no sample carried one."""
+        return self.frame_width
         
     def get_long_blink_threshold_ms(self):
         if not self.natural_blinks:

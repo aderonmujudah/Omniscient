@@ -51,6 +51,7 @@ def run_accuracy_harness(fixture_path: str, screen_w: int, screen_h: int, diag_m
         "points": points,
         "model_dict": model.to_dict(),
         "ipd_px": avg_ipd,
+        "has_measured_distance": has_measured_distance,
         "long_blink_ms": session.get_long_blink_threshold_ms()
     }
 

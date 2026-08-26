@@ -1,4 +1,3 @@
-import time
 from typing import Optional
 from engine.sources.base import GazeSample
 from .base import GestureDetector

@@ -25,12 +25,18 @@ class MockVideoCapture:
     def __init__(self, frames):
         self.frames = frames
         self.idx = 0
+        self.props = {}
 
     def isOpened(self):
         return True
 
     def set(self, propId, value):
+        self.props[propId] = value
         return True
+
+    def get(self, propId):
+        """Models a camera that honours the requested capture properties."""
+        return self.props.get(propId, 0)
 
     def read(self):
         if self.idx < len(self.frames):

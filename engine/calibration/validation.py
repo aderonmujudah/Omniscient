@@ -1,4 +1,8 @@
+import logging
 import math
+from typing import Optional
+
+logger = logging.getLogger(__name__)
 
 # Source: Gordon, C.C. et al. (2012). 2012 Anthropometric Survey of U.S. Army Personnel (ANSUR II). 
 # Male mean interpupillary distance is 64.7 mm (SD = 3.7 mm), female mean is 62.3 mm (SD = 3.6 mm). 
@@ -13,9 +17,12 @@ def get_focal_length_px(frame_width_px: int) -> float:
     hfov_rad = math.radians(ASSUMED_HFOV_DEG)
     return (frame_width_px / 2.0) / math.tan(hfov_rad / 2.0)
 
-def estimate_viewing_distance_mm(ipd_px: float, frame_width_px: int) -> float:
-    """Estimates viewing distance in mm from IPD in pixels."""
-    if ipd_px <= 0:
+def estimate_viewing_distance_mm(ipd_px: float, frame_width_px: Optional[int]) -> Optional[float]:
+    """
+    Estimates viewing distance in mm from IPD in pixels.
+    Returns None if either input is absent, since neither can be assumed.
+    """
+    if ipd_px <= 0 or not frame_width_px or frame_width_px <= 0:
         return None
     focal_length_px = get_focal_length_px(frame_width_px)
     return (PHYSICAL_IPD_MM * focal_length_px) / ipd_px
@@ -37,11 +44,8 @@ def pixel_to_degrees(error_px: float, distance_mm: float, screen_w: int, screen_
     theta_rad = math.atan2(error_mm, distance_mm)
     return math.degrees(theta_rad)
 
-import logging
-logger = logging.getLogger(__name__)
-
 def validate_calibration(model, test_features: list[tuple[float, float]], test_targets: list[tuple[float, float]], 
-                         ipd_px: float, frame_width_px: int, screen_w: int, screen_h: int, diag_mm: float):
+                         ipd_px: float, frame_width_px: Optional[int], screen_w: int, screen_h: int, diag_mm: float):
     """
     Evaluates the model on previously unseen points.
     Returns (mean_error_deg, worst_error_deg, points_result, has_measured_distance)
@@ -51,7 +55,11 @@ def validate_calibration(model, test_features: list[tuple[float, float]], test_t
     
     if distance_mm is None:
         has_measured_distance = False
-        logger.warning("Absent IPD measurement. Assumed viewing distance of 600.0 mm used, resulting error in degrees is fabricated.")
+        logger.warning(
+            "Viewing distance could not be estimated: interpupillary distance or capture "
+            "width is absent. An assumed 600.0 mm is used, so the reported error in degrees "
+            "is not a measurement."
+        )
         distance_mm = 600.0
     
     errors_deg = []

@@ -4,7 +4,8 @@ def extract_features(left_eye: EyeGeometry, right_eye: EyeGeometry) -> tuple[flo
     """
     Extracts the normalized feature vector from eye geometry.
     Returns (fx, fy), the average normalized iris displacement across both eyes.
-    fx = (iris.x - (inner.x + outer.x)/2) / |outer.x - inner.x| (Wait, the spec says |outer - inner| distance, not axis distance)
+    Displacement is measured from the eye-corner midpoint and scaled by the inter-corner
+    distance, so the feature is invariant to apparent eye size at different viewing distances.
     """
     import math
 
