@@ -1,5 +1,0 @@
-18:38:12 - Starting MATLAB GUI
-18:38:13 - Opening UDP Port 5005
-18:38:13 - UDP Port opened successfully
-18:38:15 - First UDP bytes received!
-18:39:11 - Window closed. Exiting.
