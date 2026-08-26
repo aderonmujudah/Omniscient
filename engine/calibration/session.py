@@ -96,13 +96,18 @@ class CalibrationSession:
             self.state_start_t = now
         
         # Process blink
-        if not sample.ok:
+        is_closed = False
+        if sample.ok and sample.ear:
+            if sample.ear["left"] < 0.2 and sample.ear["right"] < 0.2:
+                is_closed = True
+                
+        if is_closed:
             if self.current_blink_start is None:
                 self.current_blink_start = now
         else:
             if self.current_blink_start is not None:
                 duration_ms = (now - self.current_blink_start) * 1000
-                if duration_ms < 1500: # Not a loss/rest
+                if duration_ms > 50 and duration_ms < 1500: # Not just noise, not a loss/rest
                     self.natural_blinks.append(duration_ms)
                 self.current_blink_start = None
 

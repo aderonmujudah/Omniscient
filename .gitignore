@@ -1,1 +1,4 @@
 dtl1
+__pycache__/
+.pytest_cache/
+engine/sources/face_landmarker.task

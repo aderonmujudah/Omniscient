@@ -126,8 +126,11 @@ def test_blink_threshold():
     session = CalibrationSession(1920, 1080)
     # fake natural blink of 250ms
     t = 1000.0
-    session.process_sample(GazeSample(t=t, seq=1, ok=False))
-    session.process_sample(GazeSample(t=t+0.25, seq=2, ok=True, eyes={"left": {"iris": [0,0], "inner": [0,0], "outer": [100,0]}, "right": {"iris": [0,0], "inner": [0,0], "outer": [100,0]}}, ipd_px=100))
+    session.process_sample(GazeSample(t=t, seq=1, ok=True, ear={"left": 0.1, "right": 0.1}))
+    from engine.sources.base import EyeGeometry, Point2D
+    geom = {"left": EyeGeometry(Point2D(0,0), Point2D(0,0), Point2D(100,0), Point2D(0,-20), Point2D(0,20)),
+            "right": EyeGeometry(Point2D(0,0), Point2D(0,0), Point2D(100,0), Point2D(0,-20), Point2D(0,20))}
+    session.process_sample(GazeSample(t=t+0.25, seq=2, ok=True, eyes=geom, ear={"left": 0.3, "right": 0.3}, ipd_px=100))
     
     val = session.get_long_blink_threshold_ms()
     assert val >= 400.0 # Floor should apply since 250 < 400
@@ -143,13 +146,17 @@ def test_gesture_assessment_success():
     # We test long blink. Threshold is 450ms.
     # Send blink ok=False for 500ms
     t = 1000.0
-    assess.process_sample(GazeSample(t=t, seq=1, ok=False))
+    assess.process_sample(GazeSample(t=t, seq=1, ok=True, ear={"left": 0.1, "right": 0.1}))
     t += 0.5
-    assess.process_sample(GazeSample(t=t, seq=2, ok=False))
+    assess.process_sample(GazeSample(t=t, seq=2, ok=True, ear={"left": 0.1, "right": 0.1}))
     
     assert assess.successes == 1
 
-def test_gesture_assessment_decline_and_fallback():
+def test_gesture_assessment_decline_returns_fallback_strings():
+    """
+    Asserts that declining all optional gestures returns the correct fallback strings.
+    Actual instantiation and behavioral tests of reserved_zone_dwell belong in Scope 3.
+    """
     assess = GestureAssessment()
     assess.start()
     

@@ -1,7 +1,9 @@
 import math
 
-# Assumed average adult male/female IPD
-PHYSICAL_IPD_MM = 63.0
+# Source: Gordon, C.C. et al. (2012). 2012 Anthropometric Survey of U.S. Army Personnel (ANSUR II). 
+# Male mean interpupillary distance is 64.7 mm (SD = 3.7 mm), female mean is 62.3 mm (SD = 3.6 mm). 
+# We use a combined generic mean of 63.5 mm.
+PHYSICAL_IPD_MM = 63.5
 # Assumed webcam focal length in pixels (for a 640x480 frame, ~65 deg FOV)
 CAMERA_FOCAL_LENGTH_PX = 502.0 
 

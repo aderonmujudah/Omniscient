@@ -10,7 +10,12 @@ class ExtendedClosureDetector(GestureDetector):
         self.fired_this_closure = False
 
     def process_sample(self, sample: GazeSample) -> Optional[str]:
-        if not sample.ok:
+        is_closed = False
+        if sample.ok and sample.ear:
+            if sample.ear["left"] < 0.2 and sample.ear["right"] < 0.2:
+                is_closed = True
+
+        if is_closed:
             if self.closure_start_t is None:
                 self.closure_start_t = sample.t
                 self.fired_this_closure = False
