@@ -12,6 +12,5 @@ class OnlineRecalibrator:
         to slowly adapt the calibration model online.
         """
         self.activation_history.append((feature, screen_point))
-        # Actual model correction logic goes here (e.g., maintaining a sliding window of points 
-        # and blending a local affine correction, or refitting the polynomial on a background thread).
-        # This hook is defined here to satisfy S2; S6 wires it up.
+        # Future implementation will maintain a sliding window of points
+        # to blend a local affine correction or refit the polynomial.

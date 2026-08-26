@@ -51,7 +51,7 @@ def run_engine(source, publisher, loop):
         asyncio.run_coroutine_threadsafe(publisher.stop(), loop)
 
 def main():
-    parser = argparse.ArgumentParser(description="Omniscient Engine - Scope 1")
+    parser = argparse.ArgumentParser(description="Omniscient Engine")
     parser.add_argument("--source", choices=["webcam", "replay"], default="webcam", help="Gaze source to use")
     parser.add_argument("--replay-file", type=str, help="File to replay from (if source is replay)")
     parser.add_argument("--record-file", type=str, help="File to record to (if source is webcam)")

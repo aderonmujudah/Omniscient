@@ -1,5 +1,4 @@
 import sys
-import json
 import logging
 from engine.sources.replay import ReplaySource
 from engine.calibration.session import CalibrationSession
@@ -34,14 +33,17 @@ def run_accuracy_harness(fixture_path: str, screen_w: int, screen_h: int, diag_m
     model.fit(fit_features, fit_targets)
     
     avg_ipd = session.get_avg_ipd()
+    frame_width = session.get_frame_width()
     
-    mean_err, worst_err, points = validate_calibration(
-        model, val_features, val_targets, avg_ipd, screen_w, screen_h, diag_mm
+    mean_err, worst_err, points, has_measured_distance = validate_calibration(
+        model, val_features, val_targets, avg_ipd, frame_width, screen_w, screen_h, diag_mm
     )
     
     logger.info(f"Accuracy Harness Results:")
     logger.info(f"Mean Error: {mean_err:.2f} degrees")
     logger.info(f"Worst Error: {worst_err:.2f} degrees")
+    if not has_measured_distance:
+        logger.warning("Warning: Assumed distance was used.")
     
     return {
         "mean_error_deg": mean_err,

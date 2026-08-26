@@ -1,4 +1,3 @@
-import time
 import math
 import logging
 from typing import Optional
@@ -7,10 +6,9 @@ from engine.features.eye_features import extract_features
 
 logger = logging.getLogger(__name__)
 
-# Tuned parameters
-# Dispersion threshold: 0.05 normalized feature units (empirically reasonable for webcam gaze stability).
-# If the dispersion (max distance between any two points in the window) exceeds this, the fixation is unstable.
-# I will use a threshold of 0.02 which is typical for normalized feature space (ranging -1 to 1).
+# Dispersion threshold: If the dispersion (max distance between any two points in the window) 
+# exceeds this, the fixation is unstable.
+# Value is 0.02 normalized feature units, typical for this feature space but untuned pending real data.
 DISPERSION_THRESHOLD = 0.02
 SETTLE_TIME_S = 0.3
 COLLECT_TIME_S = 0.68
@@ -51,6 +49,7 @@ class CalibrationSession:
         self.collected_features = [] # List of (fx, fy)
         self.collected_targets = [] # List of (tx, ty)
         self.collected_ipds = []
+        self.frame_width = None
         
         # Blink tracking
         self.natural_blinks = []
@@ -94,6 +93,9 @@ class CalibrationSession:
         now = sample.t
         if self.state_start_t == 0.0:
             self.state_start_t = now
+            
+        if sample.frame_width is not None and self.frame_width is None:
+            self.frame_width = sample.frame_width
         
         # Process blink
         is_closed = False
@@ -107,7 +109,9 @@ class CalibrationSession:
         else:
             if self.current_blink_start is not None:
                 duration_ms = (now - self.current_blink_start) * 1000
-                if duration_ms > 50 and duration_ms < 1500: # Not just noise, not a loss/rest
+                # Bounds for natural blink: 50 ms (minimum physiologically plausible) to 1500 ms.
+                # Thresholds are assumed constants pending large-scale user data collection.
+                if duration_ms > 50 and duration_ms < 1500:
                     self.natural_blinks.append(duration_ms)
                 self.current_blink_start = None
 
@@ -124,7 +128,8 @@ class CalibrationSession:
                     # Accept
                     avg_fx = sum(f[0] for f in features) / len(features)
                     avg_fy = sum(f[1] for f in features) / len(features)
-                    avg_ipd = sum(s[2] for s in self.window_samples if s[2]) / len(features)
+                    valid_ipds = [s[2] for s in self.window_samples if s[2]]
+                    avg_ipd = sum(valid_ipds) / len(valid_ipds) if valid_ipds else 0.0
                     
                     self.collected_features.append((avg_fx, avg_fy))
                     self.collected_targets.append(self.all_targets[self.current_point_idx])
@@ -163,9 +168,13 @@ class CalibrationSession:
         return self.collected_features[n_fit:], self.collected_targets[n_fit:]
         
     def get_avg_ipd(self):
-        if not self.collected_ipds:
-            return 118.4
-        return sum(self.collected_ipds) / len(self.collected_ipds)
+        valid_ipds = [ipd for ipd in self.collected_ipds if ipd > 0.0]
+        if not valid_ipds:
+            return 0.0
+        return sum(valid_ipds) / len(valid_ipds)
+        
+    def get_frame_width(self):
+        return self.frame_width if self.frame_width is not None else 640
         
     def get_long_blink_threshold_ms(self):
         if not self.natural_blinks:

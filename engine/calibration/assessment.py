@@ -1,4 +1,3 @@
-import time
 import logging
 from engine.events.gestures.long_blink import LongBlinkDetector
 from engine.events.gestures.extended_closure import ExtendedClosureDetector
@@ -6,15 +5,12 @@ from engine.events.gestures.off_screen_glance import OffScreenGlanceDetector
 
 logger = logging.getLogger(__name__)
 
-# Candidate gestures per project-flow.md 5.2
-# We use stubs/simple detectors for them.
-# The user can decline any candidate.
+# Candidate gestures.
+# smooth_pursuit, gaze_stroke, and off_screen_glance are excluded from this 
+# candidate set until their detectors are implemented.
 CANDIDATE_GESTURES = [
     "long_blink",
-    "extended_closure",
-    "off_screen_glance",
-    "smooth_pursuit",
-    "gaze_stroke"
+    "extended_closure"
 ]
 
 class GestureAssessment:
@@ -22,11 +18,7 @@ class GestureAssessment:
         self.long_blink_threshold_ms = long_blink_threshold_ms
         self.detectors = {
             "long_blink": LongBlinkDetector(threshold_ms=self.long_blink_threshold_ms),
-            "extended_closure": ExtendedClosureDetector(threshold_ms=800.0),
-            "off_screen_glance": OffScreenGlanceDetector(threshold_ms=300.0),
-            # stubs for others
-            "smooth_pursuit": type("Mock", (), {"process_sample": lambda self, s: None, "reset": lambda self: None})(),
-            "gaze_stroke": type("Mock", (), {"process_sample": lambda self, s: None, "reset": lambda self: None})()
+            "extended_closure": ExtendedClosureDetector(threshold_ms=800.0)
         }
         
         self.results = []
@@ -40,7 +32,9 @@ class GestureAssessment:
         self.false_positives = 0
         
         self.state_start_t = 0.0
-        self.control_duration_s = 3.0
+        # Control duration lengthened to 10 seconds so a single spurious event (0.1/sec) 
+        # does not permanently disable a gesture under a 0.15/sec ceiling.
+        self.control_duration_s = 10.0
         
     def start(self):
         self.current_idx = 0
@@ -75,10 +69,18 @@ class GestureAssessment:
         """User explicitly declines the current candidate."""
         if self.state in ("EXPLAIN", "TEST_ACTIVE", "TEST_CONTROL"):
             current_gesture = CANDIDATE_GESTURES[self.current_idx]
+            
+            success_rate = self.successes / self.max_attempts if self.max_attempts > 0 else 0.0
+            elapsed = current_t - self.state_start_t
+            control_elapsed = elapsed if self.state == "TEST_CONTROL" and elapsed > 0 else 0.0
+            fp_rate = self.false_positives / self.control_duration_s
+            
             self.results.append({
                 "id": current_gesture,
-                "success": 0.0,
-                "false_positive": 0.0,
+                "success": success_rate,
+                "attempts": self.attempts,
+                "false_positive": fp_rate,
+                "control_elapsed_s": control_elapsed,
                 "enabled": False,
                 "declined_by_user": True,
                 "params": {}
@@ -139,12 +141,17 @@ class GestureAssessment:
                 success_rate = self.successes / self.max_attempts if self.max_attempts > 0 else 0.0
                 fp_rate = self.false_positives / self.control_duration_s # FP per second
                 
-                enabled = (success_rate >= 0.7) and (fp_rate <= 0.1)
+                # Thresholds are tuned parameters pending large-scale data.
+                # 0.66 success floor allows 2/3 successes to pass.
+                # 0.15 fp ceiling allows 1 false positive per 10s control window.
+                enabled = (success_rate >= 0.66) and (fp_rate <= 0.15)
                 
                 self.results.append({
                     "id": current_gesture,
                     "success": success_rate,
+                    "attempts": self.attempts,
                     "false_positive": fp_rate,
+                    "control_elapsed_s": self.control_duration_s,
                     "enabled": enabled,
                     "declined_by_user": False,
                     "params": {"threshold_ms": self.long_blink_threshold_ms} if current_gesture == "long_blink" else {}
@@ -170,7 +177,6 @@ class GestureAssessment:
         
         enabled = [r for r in self.results if r["enabled"] and not r["declined_by_user"]]
         
-        # Prefer fastest. Let's hardcode a preference order for speed.
         preference = ["long_blink", "off_screen_glance", "gaze_stroke", "extended_closure", "smooth_pursuit"]
         
         available = []

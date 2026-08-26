@@ -29,6 +29,9 @@ class MockVideoCapture:
     def isOpened(self):
         return True
 
+    def set(self, propId, value):
+        return True
+
     def read(self):
         if self.idx < len(self.frames):
             frame = self.frames[self.idx]
@@ -74,13 +77,13 @@ def test_replay_timing():
     source = ReplaySource(FIXTURE_PATH)
     source.start()
     
-    # We will measure the real time deltas between yields
+    # Measure the real time deltas between yields
     samples_yielded = []
     
-    # In order to accurately measure, we collect them in a list
+    # Collect samples to measure accurately
     start_time = time.monotonic()
     
-    # We want to measure the time since the FIRST sample
+    # Measure the time since the FIRST sample
     first_yield_real = None
     first_sample_t = None
     
@@ -102,12 +105,7 @@ def test_webcam_good_frame(mock_vc):
     """
     Pass mark 1: Produces samples at a measured rate.
     """
-    # Create a dummy image (e.g. Lena) or just an image with enough texture that mediapipe won't crash
-    # Actually, a black frame will result in no face.
-    # To get a face, we need an actual face image. We can skip the actual mediapipe detection if we just mock the detector,
-    # but the instructions say "with a real camera" and "containerized test harness for the platform-independent signal path".
-    # Wait, in the test harness without a camera, we can use a recorded image. 
-    # Let's download a small face image once during test setup.
+    # Download a static face image to exercise the MediaPipe face detection path in the CI environment where no real camera is present.
     import urllib.request
     img_path = "/tmp/face.jpg"
     if not os.path.exists(img_path):

@@ -52,8 +52,15 @@ class WebcamSource(GazeSource):
         self._ensure_model()
         logger.info(f"Starting WebcamSource on camera {self.camera_index}")
         self.cap = cv2.VideoCapture(self.camera_index)
+        self.cap.set(cv2.CAP_PROP_FRAME_WIDTH, 640)
+        self.cap.set(cv2.CAP_PROP_FRAME_HEIGHT, 480)
         if not self.cap.isOpened():
             raise RuntimeError(f"Could not open camera {self.camera_index}")
+            
+        actual_w = int(self.cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        actual_h = int(self.cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        if actual_w != 640 or actual_h != 480:
+            logger.warning(f"Camera did not honor 640x480 request. Actual resolution: {actual_w}x{actual_h}")
 
         base_options = python.BaseOptions(model_asset_path=self.model_path)
         options = vision.FaceLandmarkerOptions(
@@ -106,12 +113,15 @@ class WebcamSource(GazeSource):
             mp_image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb_frame)
             
             detection_result = self.detector.detect(mp_image)
+            
+            h_img, w_img, _ = frame.shape
 
             sample = GazeSample(
                 t=cap_time,
                 seq=self.seq,
                 ok=False,
-                condition=condition
+                condition=condition,
+                frame_width=w_img
             )
 
             if detection_result.face_landmarks:
@@ -134,8 +144,6 @@ class WebcamSource(GazeSource):
                     "left": EyeGeometry(iris=left_iris, inner=left_inner, outer=left_outer, top=left_top, bottom=left_bottom),
                     "right": EyeGeometry(iris=right_iris, inner=right_inner, outer=right_outer, top=right_top, bottom=right_bottom)
                 }
-
-                h_img, w_img, _ = frame.shape
                 
                 sample.ear = {
                     "left": compute_ear(left_top, left_bottom, left_inner, left_outer, w_img, h_img),

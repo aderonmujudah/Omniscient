@@ -61,6 +61,7 @@ class ReplaySource(GazeSource):
                 eyes=eyes,
                 ear=data.get('ear'),
                 ipd_px=data.get('ipd_px'),
+                frame_width=data.get('frame_width'),
                 conf=data.get('conf')
             )
 
@@ -74,8 +75,5 @@ class ReplaySource(GazeSource):
             if target_time > now:
                 time.sleep(target_time - now)
 
-            # Update sample timestamp to reflect replay capture time?
-            # Instructions: "replays a captured GazeSample stream from disk at its original timing."
-            # We keep the original t or update it? "A session can be recorded and replayed with inter-sample timing within 5 ms of the original."
-            # Let's yield it exactly as recorded.
+            # Replays are deterministic and must use original captured timestamps.
             yield sample

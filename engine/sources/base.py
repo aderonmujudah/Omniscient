@@ -23,6 +23,7 @@ class GazeSample:
     eyes: Optional[Dict[str, EyeGeometry]] = None
     ear: Optional[Dict[str, float]] = None
     ipd_px: Optional[float] = None
+    frame_width: Optional[int] = None
     conf: Optional[float] = None
 
 class GazeSource(Protocol):
