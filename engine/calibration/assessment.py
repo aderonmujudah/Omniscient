@@ -2,23 +2,34 @@ import logging
 from engine.events.gestures.long_blink import LongBlinkDetector
 from engine.events.gestures.extended_closure import ExtendedClosureDetector
 from engine.events.gestures.off_screen_glance import OffScreenGlanceDetector
+from engine.events.gestures.smooth_pursuit import SmoothPursuitDetector
+from engine.events.gestures.gaze_stroke import GazeStrokeDetector
 
 logger = logging.getLogger(__name__)
 
-# Candidate gestures.
-# smooth_pursuit, gaze_stroke, and off_screen_glance are excluded from this 
-# candidate set until their detectors are implemented.
 CANDIDATE_GESTURES = [
     "long_blink",
-    "extended_closure"
+    "extended_closure",
+    "off_screen_glance",
+    "smooth_pursuit",
+    "gaze_stroke",
 ]
 
 class GestureAssessment:
-    def __init__(self, long_blink_threshold_ms: float = 450.0):
+    def __init__(
+        self,
+        long_blink_threshold_ms: float = 450.0,
+        screen_w: int = 1920,
+        screen_h: int = 1080,
+    ):
         self.long_blink_threshold_ms = long_blink_threshold_ms
+        ear_threshold = 0.2
         self.detectors = {
-            "long_blink": LongBlinkDetector(threshold_ms=self.long_blink_threshold_ms),
-            "extended_closure": ExtendedClosureDetector(threshold_ms=800.0)
+            "long_blink": LongBlinkDetector(ear_threshold=ear_threshold),
+            "extended_closure": ExtendedClosureDetector(ear_threshold=ear_threshold),
+            "off_screen_glance": OffScreenGlanceDetector(screen_w=screen_w, screen_h=screen_h),
+            "smooth_pursuit": SmoothPursuitDetector(),
+            "gaze_stroke": GazeStrokeDetector(),
         }
         
         self.results = []
