@@ -8,11 +8,88 @@ from engine.sources.webcam import WebcamSource
 from engine.sources.replay import ReplaySource
 from engine.sources.recorder import RecorderSource
 from engine.transport.server import WebsocketPublisher
+from engine.calibration.model import CalibrationModel
+from engine.calibration.store import load_profile
+from engine.events.dispatcher import EventDispatcher
+from engine.events.dwell import DwellTimer
+from engine.events.emitter import InteractionEmitter
+from engine.events.gestures.registry import GestureRegistry
+from engine.features.eye_features import extract_features
+from engine.filtering.classifier import SampleClassifier
+from engine.filtering.fixation import FixationDetector
+from engine.filtering.one_euro import OneEuroFilter
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
 
-def run_engine(source, publisher, loop):
+# Reserved zones are a property of the screen rather than of the user, so they are defined
+# here rather than persisted per profile. Fractions of the screen, not pixels, so a profile
+# calibrated on one display resolves correctly on another.
+RESERVED_ZONES = {
+    "engage": {"x": 0.0, "y": 0.0, "w": 0.08, "h": 0.08},
+    "cancel": {"x": 0.92, "y": 0.0, "w": 0.08, "h": 0.08},
+    "menu": {"x": 0.0, "y": 0.92, "w": 0.08, "h": 0.08},
+}
+
+
+def build_emitter(profile, dispatcher, rate):
+    """Compose the signal and event layers from a calibration profile.
+
+    Returns the emitter and the calibration model, or (None, None) when the profile carries
+    no mapping. Without a mapping there is no screen position, so no gesture that depends on
+    one can run and no cursor can be drawn.
+    """
+    model_data = profile.get("model") or {}
+    if not model_data.get("coeffs_x"):
+        return None, None
+
+    model = CalibrationModel()
+    model.load_dict(model_data)
+
+    screen = profile.get("screen") or {}
+    screen_w = int(screen.get("w", 1920))
+    screen_h = int(screen.get("h", 1080))
+
+    gestures = profile.get("gestures") or {}
+    roles = gestures.get("roles") or {}
+    gesture_params = {
+        entry["id"]: entry.get("params") or {}
+        for entry in gestures.get("assessed") or []
+        if entry.get("id")
+    }
+
+    registry = GestureRegistry(
+        role_assignment=roles,
+        screen_w=screen_w,
+        screen_h=screen_h,
+        reserved_zones=RESERVED_ZONES,
+        gesture_params=gesture_params,
+        closure_threshold_ms=(profile.get("blink") or {}).get("long_threshold_ms"),
+    )
+
+    emitter = InteractionEmitter(
+        gaze_filter=OneEuroFilter(rate=rate),
+        classifier=SampleClassifier(fixation_detector=FixationDetector()),
+        registry=registry,
+        dispatcher=dispatcher,
+        dwell=DwellTimer(),
+    )
+    return emitter, model
+
+
+def calibrated_position(model, sample):
+    """Map a sample to screen coordinates, or None when its geometry is unusable."""
+    if model is None or not sample.ok or not sample.eyes:
+        return None
+    left = sample.eyes.get("left")
+    right = sample.eyes.get("right")
+    if left is None or right is None:
+        return None
+    fx, fy = extract_features(left, right)
+    return model.predict(fx, fy)
+
+
+def run_engine(source, publisher, loop, emitter=None, model=None):
     source.start()
     logger.info("Engine started.")
     
@@ -23,6 +100,14 @@ def run_engine(source, publisher, loop):
     try:
         for sample in source.iter_samples():
             publisher.publish_sample(sample)
+
+            if emitter is not None:
+                position = calibrated_position(model, sample)
+                if position is None:
+                    emitter.process_sample(sample, None, None)
+                else:
+                    emitter.process_sample(sample, position[0], position[1])
+
             frames_since_stat += 1
             if sample.conf is not None:
                 recent_confs.append(sample.conf)
@@ -59,6 +144,8 @@ def main():
     parser.add_argument("--port", type=int, default=8765, help="WebSocket port")
     parser.add_argument("--camera-index", type=int, default=0, help="Camera index for webcam source")
     parser.add_argument("--model-path", type=str, default="face_landmarker.task", help="Path to face_landmarker.task")
+    parser.add_argument("--profile", type=str, help="Calibration profile to load (defaults to the stored profile)")
+    parser.add_argument("--rate", type=float, default=30.0, help="Expected sample rate in Hz, for filter tuning")
     args = parser.parse_args()
 
     if args.source == "replay":
@@ -84,8 +171,18 @@ def main():
     
     publisher.start(loop)
 
-    # Run the engine
-    run_engine(source, publisher, loop)
+    dispatcher = EventDispatcher()
+    dispatcher.set_ws_broadcast(publisher.publish_event)
+
+    profile = load_profile(args.profile) if args.profile else load_profile()
+    emitter, model = build_emitter(profile, dispatcher, args.rate)
+    if emitter is None:
+        logger.warning(
+            "No calibration mapping found. Publishing raw samples only; no interaction "
+            "events will be emitted until a profile is calibrated."
+        )
+
+    run_engine(source, publisher, loop, emitter=emitter, model=model)
     
     # Cleanup
     loop.call_soon_threadsafe(loop.stop)

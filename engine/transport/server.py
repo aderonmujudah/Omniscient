@@ -45,6 +45,18 @@ class WebsocketPublisher:
         # Ignore errors from disconnected clients during broadcast
         await asyncio.gather(*tasks, return_exceptions=True)
 
+    def publish_event(self, event_dict: dict) -> None:
+        """Broadcast one InteractionEvent to every connected client.
+
+        Samples and events share the socket. They are distinguished by `event_type`, which
+        only an event carries, so a client can route on its presence.
+        """
+        if not self.loop or not self.clients:
+            return
+        asyncio.run_coroutine_threadsafe(
+            self._broadcast(json.dumps(event_dict)), self.loop
+        )
+
     def publish_sample(self, sample):
         if not self.loop or not self.clients:
             return

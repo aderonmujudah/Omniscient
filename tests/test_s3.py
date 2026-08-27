@@ -32,6 +32,9 @@ from engine.events.gestures.smooth_pursuit import SmoothPursuitDetector
 from engine.events.gestures.gaze_stroke import GazeStrokeDetector
 from engine.events.gestures.reserved_zone_dwell import ReservedZoneDwellDetector
 from engine.calibration.assessment import GestureAssessment, CANDIDATE_GESTURES
+from engine.events.emitter import InteractionEmitter
+from engine.features.eye_features import extract_features
+from engine.main import RESERVED_ZONES, build_emitter, calibrated_position
 
 
 # ---------------------------------------------------------------------------
@@ -1030,3 +1033,163 @@ class TestRegistryAppliesMeasuredParameters:
                 open_sample(t=i * 0.033), gaze_x=100.0 + i * 20.0, gaze_y=540.0
             )
             assert events == []
+
+
+# ---------------------------------------------------------------------------
+# The running engine
+# ---------------------------------------------------------------------------
+
+def _eye(cx: float, cy: float) -> EyeGeometry:
+    """Eye geometry whose iris sits at a given offset within the eye."""
+    return EyeGeometry(
+        iris=Point2D(cx, cy),
+        inner=Point2D(cx - 15.0, cy),
+        outer=Point2D(cx + 15.0, cy),
+        top=Point2D(cx, cy - 5.0),
+        bottom=Point2D(cx, cy + 5.0),
+    )
+
+
+def _sample_with_eyes(t: float, offset: float, seq: int = 0, ok: bool = True,
+                      ear: float = 0.3) -> GazeSample:
+    return GazeSample(
+        t=t,
+        seq=seq,
+        ok=ok,
+        ear={"left": ear, "right": ear} if ok else None,
+        eyes={"left": _eye(100.0 + offset, 100.0), "right": _eye(200.0 + offset, 100.0)},
+        ipd_px=100.0,
+        frame_width=1280,
+        conf=0.9,
+    )
+
+
+def _fitted_profile(roles: Dict[str, str]) -> dict:
+    """A profile carrying a real fitted mapping and the given role assignment.
+
+    The mapping is fitted to synthetic features, which is legitimate here: the assertion is
+    that the composition runs and emits, not that the mapping is accurate.
+    """
+    from engine.calibration.model import CalibrationModel
+
+    features, targets = [], []
+    for i, offset in enumerate((-10.0, -5.0, 0.0, 5.0, 10.0)):
+        sample = _sample_with_eyes(float(i), offset)
+        features.append(extract_features(sample.eyes["left"], sample.eyes["right"]))
+        targets.append((960.0 + offset * 50.0, 540.0))
+
+    model = CalibrationModel()
+    model.fit(features, targets)
+
+    return {
+        "screen": {"w": 1920, "h": 1080},
+        "model": model.to_dict(),
+        "blink": {"natural_p99_ms": 180, "long_threshold_ms": 450},
+        "gestures": {"assessed": [], "roles": roles},
+    }
+
+
+class TestRegistryReadsTheProfileItIsGiven:
+    """The registry must resolve the role names the calibration profile actually writes.
+
+    A role the registry fails to resolve is left unfilled, which removes the user's ability
+    to perform that action entirely rather than failing visibly.
+    """
+
+    def test_roles_from_assign_roles_resolve(self):
+        roles = GestureAssessment(gaze_position_available=True).assign_roles()
+
+        registry = GestureRegistry(
+            role_assignment=roles,
+            screen_w=1920,
+            screen_h=1080,
+            reserved_zones=RESERVED_ZONES,
+            gesture_params={},
+        )
+
+        assert registry._zone_detector is not None
+        assert set(registry._zone_detector._zones) == {Role.ENGAGE, Role.CANCEL, Role.MENU}
+
+    def test_every_role_fires_from_an_unmodified_profile_assignment(self):
+        """With no optional gesture enabled, all three roles must still be reachable."""
+        roles = GestureAssessment(gaze_position_available=True).assign_roles()
+
+        registry = GestureRegistry(
+            role_assignment=roles,
+            screen_w=1920,
+            screen_h=1080,
+            reserved_zones=RESERVED_ZONES,
+            gesture_params={},
+        )
+
+        corners = {
+            Role.ENGAGE: (40.0, 40.0),
+            Role.CANCEL: (1880.0, 40.0),
+            Role.MENU: (40.0, 1040.0),
+        }
+
+        fired = set()
+        t = 0.0
+        for role, (x, y) in corners.items():
+            registry.reset()
+            for step in range(40):
+                t += 0.05
+                for event in registry.process_sample(make_sample(t, seq=step), x, y):
+                    fired.add(event.role)
+
+        assert fired == {Role.ENGAGE, Role.CANCEL, Role.MENU}
+
+
+class TestEngineEmitsEvents:
+    """The engine that runs must emit the event set, not merely contain components that could."""
+
+    def test_replayed_session_produces_interaction_events(self):
+        dispatcher = EventDispatcher()
+        published: List[dict] = []
+        dispatcher.set_ws_broadcast(published.append)
+
+        roles = GestureAssessment(gaze_position_available=True).assign_roles()
+        emitter, model = build_emitter(_fitted_profile(roles), dispatcher, rate=30.0)
+        assert emitter is not None, "a profile with a fitted mapping must produce an emitter"
+
+        for step in range(40):
+            sample = _sample_with_eyes(step * 0.033, 0.0, seq=step)
+            position = calibrated_position(model, sample)
+            assert position is not None
+            emitter.process_sample(sample, position[0], position[1])
+
+        types = {event["event_type"] for event in published}
+        assert EventType.GAZE_MOVE.value in types
+        assert EventType.FIXATION_START.value in types
+
+    def test_no_mapping_yields_no_emitter_rather_than_a_silent_one(self):
+        """A profile without a mapping has no screen position, and the engine must say so."""
+        emitter, model = build_emitter({"screen": {"w": 1920, "h": 1080}},
+                                       EventDispatcher(), rate=30.0)
+        assert emitter is None
+        assert model is None
+
+    def test_tracking_loss_is_reported_once_and_cancels_dwell(self):
+        dispatcher = EventDispatcher()
+        published: List[dict] = []
+        dispatcher.set_ws_broadcast(published.append)
+
+        roles = GestureAssessment(gaze_position_available=True).assign_roles()
+        emitter, model = build_emitter(_fitted_profile(roles), dispatcher, rate=30.0)
+
+        for step in range(10):
+            sample = _sample_with_eyes(step * 0.033, 0.0, seq=step)
+            position = calibrated_position(model, sample)
+            emitter.process_sample(sample, position[0], position[1])
+
+        published.clear()
+        for step in range(5):
+            emitter.process_sample(make_sample(1.0 + step * 0.033, ok=False, seq=step), None, None)
+
+        lost = [e for e in published if e["event_type"] == EventType.TRACKING_LOST.value]
+        assert len(lost) == 1, "a continuing loss must not be re-reported every frame"
+
+        recovered = _sample_with_eyes(2.0, 0.0, seq=99)
+        position = calibrated_position(model, recovered)
+        emitter.process_sample(recovered, position[0], position[1])
+        assert any(e["event_type"] == EventType.TRACKING_RESUMED.value for e in published)

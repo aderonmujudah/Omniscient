@@ -30,6 +30,19 @@ _DETECTOR_FACTORIES = {
 }
 
 
+def _parse_role(name: str) -> Optional[Role]:
+    """Resolve a role name as the calibration profile records it.
+
+    The profile writes roles in lower case, per the persisted profile format, while the
+    role enum is upper case. Matching them exactly would leave every role unfilled, which
+    silently removes the user's ability to act rather than failing visibly.
+    """
+    try:
+        return Role(str(name).upper())
+    except ValueError:
+        return None
+
+
 class GestureRegistry:
     """Resolves gesture detectors to interaction roles using profile configuration."""
 
@@ -42,6 +55,7 @@ class GestureRegistry:
         ear_threshold: float = 0.2,
         *,
         gesture_params: Dict[str, dict],
+        closure_threshold_ms: Optional[float] = None,
     ) -> None:
         """
         Args:
@@ -49,6 +63,9 @@ class GestureRegistry:
                 gesture name. Required rather than optional: a detector constructed
                 without its measured parameters silently falls back to a generic band,
                 discarding the measurement the assessment recorded.
+            closure_threshold_ms: The user's measured deliberate-closure threshold. Passed as
+                a measurement rather than as a named gesture's parameter, so that callers
+                outside this package never need to know which detectors consume it.
         """
         self._gesture_detectors: list = []
         self._gesture_role_map: Dict[int, Role] = {}
@@ -57,22 +74,25 @@ class GestureRegistry:
         self._gesture_params = gesture_params
 
         zone_roles: Dict[Role, dict] = {}
+        zone_rects = {str(name).upper(): rect for name, rect in reserved_zones.items()}
 
         for role_str, gesture_name in role_assignment.items():
-            try:
-                role = Role(role_str)
-            except ValueError:
+            role = _parse_role(role_str)
+            if role is None:
+                logger.warning("Unrecognised role %r in the profile; it stays unfilled.", role_str)
                 continue
 
             if gesture_name in ("reserved_zone_dwell", "corner_dwell"):
-                if role_str in reserved_zones:
-                    zone_roles[role] = reserved_zones[role_str]
+                if role.value in zone_rects:
+                    zone_roles[role] = zone_rects[role.value]
             elif gesture_name in _DETECTOR_FACTORIES:
                 factory_kwargs = {
                     "screen_w": screen_w,
                     "screen_h": screen_h,
                     "ear_threshold": ear_threshold,
                 }
+                if closure_threshold_ms is not None:
+                    factory_kwargs["threshold_ms"] = closure_threshold_ms
                 factory_kwargs.update(gesture_params.get(gesture_name, {}))
                 det = _DETECTOR_FACTORIES[gesture_name](factory_kwargs)
                 if not det.can_fire:

@@ -68,5 +68,14 @@ class SampleClassifier:
 
         return SampleState.SACCADE, completed
 
+    @property
+    def active_fixation_centroid(self) -> Optional[Tuple[float, float]]:
+        """Centroid of the fixation in progress, or None when the gaze is not fixating.
+
+        A fixation should be acted on at its centroid rather than at the latest sample,
+        since the centroid is the estimate the dispersion test actually accepted.
+        """
+        return self._fixation_detector.active_fixation_centroid
+
     def reset(self) -> None:
         self._fixation_detector.reset()
