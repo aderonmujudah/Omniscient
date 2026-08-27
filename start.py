@@ -20,7 +20,7 @@ def main():
         sys.exit(1)
 
     # Launch tracking engine
-    engine_process = subprocess.Popen([python_exe, "engine/main.py"])
+    engine_process = subprocess.Popen([python_exe, "-m", "engine.main"])
     logger.info("Tracking engine started.")
 
     # Launch UI overlay
