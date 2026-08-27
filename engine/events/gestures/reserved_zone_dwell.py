@@ -67,7 +67,9 @@ class ReservedZoneDwellDetector:
             self._zone_entry_t = sample.t if active_zone is not None else None
 
         if self._current_zone is not None and self._zone_entry_t is not None:
-            if sample.t - self._zone_entry_t >= self._dwell_duration_s:
+            # Menu role requires a 2s dwell per spec, others use default
+            duration_needed = 2.0 if self._current_zone == Role.MENU else self._dwell_duration_s
+            if sample.t - self._zone_entry_t >= duration_needed:
                 self._latched_x = self._last_gaze_x
                 self._latched_y = self._last_gaze_y
                 self._last_fired_role = self._current_zone

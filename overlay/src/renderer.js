@@ -13,6 +13,14 @@ engine.addEventListener((event) => {
     if (event.event_type === 'GAZE_MOVE') {
         cursor.update(event.x, event.y);
     } else if (event.event_type === 'STATE_CHANGE') {
+        const ind = document.getElementById("status-indicator");
+        if (ind) {
+            if (event.is_paused) {
+                ind.style.display = "block";
+            } else {
+                ind.style.display = "none";
+            }
+        }
         targetStage.onStateChange(event);
         dwellRing.style.display = "none";
     } else if (event.event_type === 'DWELL_START') {

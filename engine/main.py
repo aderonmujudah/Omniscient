@@ -26,9 +26,9 @@ logger = logging.getLogger(__name__)
 # here rather than persisted per profile. Fractions of the screen, not pixels, so a profile
 # calibrated on one display resolves correctly on another.
 RESERVED_ZONES = {
-    "engage": {"x": 0.0, "y": 0.0, "w": 0.08, "h": 0.08},
+    "engage": {"x": 0.0, "y": 0.92, "w": 0.08, "h": 0.08},
     "cancel": {"x": 0.92, "y": 0.0, "w": 0.08, "h": 0.08},
-    "menu": {"x": 0.0, "y": 0.92, "w": 0.08, "h": 0.08},
+    "menu": {"x": 0.0, "y": 0.0, "w": 0.08, "h": 0.08},
 }
 
 

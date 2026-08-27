@@ -45,8 +45,12 @@ class DwellTimer:
         elif zone_id is not None and not self._completed:
             elapsed = timestamp - self._dwell_start_t
             
-            # Use shorter dwell inside radial menu
-            current_duration = 0.4 if zone_id.startswith("radial_") else self._dwell_duration_s
+            if zone_id.startswith("radial_"):
+                current_duration = 0.4
+            elif zone_id.startswith("sys_"):
+                current_duration = 1.5
+            else:
+                current_duration = self._dwell_duration_s
             progress = min(elapsed / current_duration, 1.0)
             
             if progress >= 1.0:

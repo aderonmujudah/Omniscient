@@ -144,12 +144,28 @@ class StateMachine:
         self.input_backend = input_backend
         self.recalibrator = recalibrator
         self.latest_features = None
+        
+        self.is_paused = False
+        from engine.scroll import ScrollController
+        self.scroll_controller = ScrollController(screen_h, input_backend)
 
     def process_event(self, event: InteractionEvent):
         # We only consider these events for timeout tracking
         if event.event_type in (EventType.GESTURE.value, EventType.DWELL_COMPLETE.value, EventType.GAZE_MOVE.value):
             if event.event_type != EventType.GAZE_MOVE.value:
                 self.last_input_time = event.timestamp
+                
+        if event.event_type == EventType.GAZE_MOVE.value and event.x is not None and event.y is not None:
+            self.scroll_controller.update(event.x, event.y, event.timestamp, self.is_paused or self.state != "IDLE")
+
+        if event.event_type == EventType.GESTURE.value:
+            if event.role == "MENU":
+                if self.state != "SYSTEM_MENU":
+                    self.change_state("SYSTEM_MENU", event.timestamp)
+                return
+                
+        if self.is_paused and self.state != "SYSTEM_MENU":
+            return
 
         if event.event_type == EventType.GESTURE.value:
             if event.role == "ENGAGE":
@@ -187,6 +203,23 @@ class StateMachine:
                     else:
                         self._execute_action(action)
                         self.change_state("IDLE", event.timestamp)
+            elif self.state == "SYSTEM_MENU":
+                if event.zone_id and event.zone_id.startswith("sys_"):
+                    action = event.zone_id.replace("sys_", "")
+                    if action == "resume":
+                        self.is_paused = False
+                        self.change_state("IDLE", event.timestamp)
+                    elif action == "pause":
+                        self.is_paused = True
+                        self.change_state("IDLE", event.timestamp)
+                    elif action == "recalibrate":
+                        self.dispatcher.dispatch(InteractionEvent(
+                            event_type=EventType.CALIBRATION_START.value,
+                            timestamp=event.timestamp
+                        ))
+                    elif action == "quit":
+                        import sys
+                        sys.exit(0)
 
     def _map_to_orig(self, px, py, rect):
         px_ratio = px / self.screen_w
@@ -293,7 +326,8 @@ class StateMachine:
             cells=[[{"x": c.x, "y": c.y, "w": c.w, "h": c.h} for c in row] for row in self.cells] if self.cells else None,
             zoom_rect={"x": self.zoom1_rect.x, "y": self.zoom1_rect.y, "w": self.zoom1_rect.w, "h": self.zoom1_rect.h} if to_state == "ZOOM1" and self.zoom1_rect else ({"x": self.zoom2_rect.x, "y": self.zoom2_rect.y, "w": self.zoom2_rect.w, "h": self.zoom2_rect.h} if to_state == "ZOOM2" and self.zoom2_rect else None),
             x=self.resolved_point[0] if self.resolved_point and to_state in ("RESOLVED", "RADIAL") else None,
-            y=self.resolved_point[1] if self.resolved_point and to_state in ("RESOLVED", "RADIAL") else None
+            y=self.resolved_point[1] if self.resolved_point and to_state in ("RESOLVED", "RADIAL") else None,
+            is_paused=self.is_paused
         )
         self.dispatcher.dispatch(event)
 
@@ -320,4 +354,16 @@ class StateMachine:
             wedges = ["left_click", "right_click", "double_click", "middle_click", "drag_start", "drag_end", "cancel"]
             wedge_idx = int((angle + 360 / 14) % 360 / (360 / 7))
             return f"radial_{wedges[wedge_idx]}"
+        elif self.state == "SYSTEM_MENU":
+            # 4 large quadrants
+            nx = fx / self.screen_w
+            ny = fy / self.screen_h
+            if nx > 0.5 and ny < 0.5:
+                return "sys_resume"
+            elif nx < 0.5 and ny > 0.5:
+                return "sys_pause"
+            elif nx > 0.5 and ny > 0.5:
+                return "sys_quit"
+            elif nx < 0.5 and ny < 0.5:
+                return "sys_recalibrate"
         return None

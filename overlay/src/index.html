@@ -86,9 +86,21 @@
             display: none;
             z-index: 2000;
         }
+        #status-indicator {
+            position: absolute;
+            top: 10px; right: 10px;
+            padding: 5px 10px;
+            background-color: rgba(255, 0, 0, 0.7);
+            color: white;
+            font-weight: bold;
+            border-radius: 4px;
+            display: none;
+            z-index: 20000;
+        }
     </style>
 </head>
 <body>
+    <div id="status-indicator">PAUSED</div>
     <div id="targeting-layer">
         <div id="frozen-bg"></div>
         <div id="grid-container"></div>

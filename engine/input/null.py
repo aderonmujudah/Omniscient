@@ -16,3 +16,7 @@ class NullInput(BaseInputBackend):
         
     def _inject_keyboard(self, inputs: List[KeyboardInput]) -> None:
         self.keyboard_injections.append(inputs)
+
+    def scroll(self, x: float, y: float, dy: float) -> None:
+        # Just record the call for tests by using a fake mouse injection
+        self.mouse_injections.append(["scroll", x, y, dy])

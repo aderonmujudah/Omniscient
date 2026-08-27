@@ -133,6 +133,40 @@ export class TargetStage {
                 this.marker.style.top = cy + 'px';
                 this.marker.style.display = "block";
             }
+        } else if (this.state === "SYSTEM_MENU") {
+            this.grid.innerHTML = "";
+            this.bg.style.background = "rgba(0, 0, 0, 0.8)";
+            this.bg.style.backgroundSize = "100% 100%";
+            this.bg.style.backgroundPosition = "0 0";
+            
+            const quadrants = [
+                {id: "sys_resume", label: "Resume", left: "0%", top: "0%", bg: "rgba(50, 150, 50, 0.6)"},
+                {id: "sys_recalibrate", label: "Recalibrate", left: "50%", top: "0%", bg: "rgba(50, 50, 150, 0.6)"},
+                {id: "sys_pause", label: "Pause", left: "0%", top: "50%", bg: "rgba(150, 150, 50, 0.6)"},
+                {id: "sys_quit", label: "Quit", left: "50%", top: "50%", bg: "rgba(150, 50, 50, 0.6)"}
+            ];
+            
+            quadrants.forEach(q => {
+                const div = document.createElement('div');
+                div.id = q.id;
+                div.style.position = 'absolute';
+                div.style.left = q.left;
+                div.style.top = q.top;
+                div.style.width = '50%';
+                div.style.height = '50%';
+                div.style.background = q.bg;
+                div.style.display = 'flex';
+                div.style.alignItems = 'center';
+                div.style.justifyContent = 'center';
+                div.style.color = 'white';
+                div.style.fontSize = '48px';
+                div.style.fontWeight = 'bold';
+                div.style.boxSizing = 'border-box';
+                div.style.border = '2px solid rgba(255,255,255,0.2)';
+                div.innerText = q.label;
+                this.grid.appendChild(div);
+            });
+            this.marker.style.display = "none";
         } else if (this.state === "RESOLVED") {
             this.grid.innerHTML = "";
             // Keep background zoomed? Yes, maybe remove dimming? 
@@ -166,6 +200,10 @@ export class TargetStage {
             Array.from(this.grid.children).forEach(el => el.style.background = 'rgba(0,0,0,0.7)');
             const wedge = document.getElementById(event.zone_id);
             if (wedge) wedge.style.background = 'rgba(0,255,0,0.5)';
+        } else if (this.state === "SYSTEM_MENU" && event.zone_id && event.zone_id.startsWith("sys_")) {
+            Array.from(this.grid.children).forEach(el => el.style.border = '2px solid rgba(255,255,255,0.2)');
+            const quad = document.getElementById(event.zone_id);
+            if (quad) quad.style.border = '10px solid rgba(0,255,0,0.8)';
         }
     }
 }
