@@ -1,17 +1,25 @@
-from typing import Optional, List, Tuple
+"""Smooth pursuit detector.
+
+Smooth pursuit is identified by correlating gaze motion against the motion of a moving
+stimulus the user is asked to follow. No component yet produces that stimulus signal, so
+this detector has no reachable path that can fire and reports `can_fire` as False. It is
+therefore never offered as a candidate gesture: a user asked to perform it would have
+every attempt recorded as a failure they caused.
+
+The interface is retained so that the detector can be completed once a pursuit stimulus
+exists, without changing any consumer.
+
+Source: Vidal, M., Bulling, A. and Gellersen, H. (2013). Pursuits: Spontaneous
+Interaction with Displays based on Smooth Pursuit Eye Movement and Moving Targets.
+"""
+
+from typing import Optional
 from engine.sources.base import GazeSample
 
+
 class SmoothPursuitDetector:
-    def __init__(
-        self,
-        correlation_threshold: float = 0.8,
-        window_duration_s: float = 1.0,
-        min_velocity_px_s: float = 50.0
-    ) -> None:
-        self._correlation_threshold = correlation_threshold
-        self._window_duration_s = window_duration_s
-        self._min_velocity_px_s = min_velocity_px_s
-        self._history: List[Tuple[float, float, float]] = []
+
+    def __init__(self) -> None:
         self._latched_x: float = 0.0
         self._latched_y: float = 0.0
         self._last_gaze_x: float = 0.0
@@ -22,34 +30,20 @@ class SmoothPursuitDetector:
         return "smooth_pursuit"
 
     @property
+    def requires_gaze_position(self) -> bool:
+        return True
+
+    @property
+    def can_fire(self) -> bool:
+        return False
+
+    @property
     def latched_position(self) -> tuple[float, float]:
         return (self._latched_x, self._latched_y)
 
     def process_sample(self, sample: GazeSample) -> Optional[str]:
-        if not sample.ok:
-            return None
-            
-        self._history.append((sample.t, self._last_gaze_x, self._last_gaze_y))
-        
-        while self._history and self._history[0][0] < sample.t - self._window_duration_s:
-            self._history.pop(0)
-            
-        if len(self._history) < 2:
-            return None
-            
-        dt = self._history[-1][0] - self._history[0][0]
-        if dt < self._window_duration_s * 0.8:
-            return None
-            
-        dx = self._history[-1][1] - self._history[0][1]
-        dy = self._history[-1][2] - self._history[0][2]
-        dist = (dx**2 + dy**2)**0.5
-        vel = dist / dt if dt > 0 else 0.0
-        
-        if vel > self._min_velocity_px_s:
-            # Requires a target to correlate against, which is UNTUNED/missing right now.
-            pass
-            
+        """Always returns None. Correlation requires a stimulus target signal that no
+        component currently produces."""
         return None
 
     def update_gaze_position(self, x: float, y: float) -> None:
@@ -57,6 +51,5 @@ class SmoothPursuitDetector:
         self._last_gaze_y = y
 
     def reset(self) -> None:
-        self._history.clear()
         self._latched_x = 0.0
         self._latched_y = 0.0

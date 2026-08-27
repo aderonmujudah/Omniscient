@@ -219,3 +219,29 @@ async def test_websocket_reconnect():
         assert data['seq'] == 1
 
     await publisher.stop()
+
+
+def test_recorded_sample_round_trips_capture_width(tmp_path):
+    """A recorded session must preserve the capture width. Without it a replayed session
+    yields no viewing distance, so it cannot support an accuracy measurement."""
+    from engine.sources.recorder import _serialize_sample
+
+    sample = GazeSample(
+        t=1000.0, seq=1, ok=True, ear={"left": 0.3, "right": 0.3},
+        ipd_px=120.0, frame_width=1280, conf=0.95,
+    )
+    line = _serialize_sample(sample)
+    assert json.loads(line)["frame_width"] == 1280
+
+    path = tmp_path / "recorded.jsonl"
+    path.write_text(line + "\n")
+
+    from engine.sources.replay import ReplaySource
+
+    source = ReplaySource(str(path))
+    source.start()
+    try:
+        replayed = list(source.iter_samples())
+    finally:
+        source.stop()
+    assert replayed[0].frame_width == 1280

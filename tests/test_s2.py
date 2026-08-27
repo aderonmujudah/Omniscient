@@ -162,19 +162,19 @@ def test_blink_threshold():
     assert val >= 400.0 # Floor should apply since 250 < 400
     
 def test_gesture_assessment_success():
-    assess = GestureAssessment()
+    assess = GestureAssessment(gaze_position_available=False)
     assess.start()
     
     assert assess.state == "EXPLAIN"
     assess.user_ready()
     assert assess.state == "TEST_ACTIVE"
     
-    # Test long blink. Threshold is 450ms.
-    # Send blink ok=False for 500ms
+    # The measured threshold is 450 ms, so a 500 ms closure qualifies. The closure is
+    # classified when the eyes reopen, since a longer closure would be a different gesture.
     t = 1000.0
-    assess.process_sample(GazeSample(t=t, seq=1, ok=True, ear={"left": 0.1, "right": 0.1}))
+    assess.process_sample(GazeSample(t=t, seq=1, ok=True, ear={"left": 0.1, "right": 0.1}), gaze_x=None, gaze_y=None)
     t += 0.5
-    assess.process_sample(GazeSample(t=t, seq=2, ok=True, ear={"left": 0.1, "right": 0.1}))
+    assess.process_sample(GazeSample(t=t, seq=2, ok=True, ear={"left": 0.3, "right": 0.3}), gaze_x=None, gaze_y=None)
     
     assert assess.successes == 1
 
@@ -183,7 +183,7 @@ def test_gesture_assessment_decline_returns_fallback_strings():
     Asserts that declining all optional gestures returns the correct fallback strings.
     Actual instantiation and behavioral tests of reserved_zone_dwell are deferred until implemented.
     """
-    assess = GestureAssessment()
+    assess = GestureAssessment(gaze_position_available=False)
     assess.start()
     
     # Decline everything
@@ -197,7 +197,7 @@ def test_gesture_assessment_decline_returns_fallback_strings():
     assert roles["menu"] == "corner_dwell"
     
 def test_gesture_assessment_failure():
-    assess = GestureAssessment()
+    assess = GestureAssessment(gaze_position_available=False)
     assess.start()
     assess.user_ready()
     
@@ -205,14 +205,14 @@ def test_gesture_assessment_failure():
     t = 1000.0
     for _ in range(4):
         t += 3.1
-        assess.process_sample(GazeSample(t=t, seq=1, ok=True))
+        assess.process_sample(GazeSample(t=t, seq=1, ok=True), gaze_x=None, gaze_y=None)
         
     assert assess.successes == 0
     assert assess.state == "TEST_CONTROL"
     
     # complete control window (10.0s)
     t += 10.1
-    assess.process_sample(GazeSample(t=t, seq=2, ok=True))
+    assess.process_sample(GazeSample(t=t, seq=2, ok=True), gaze_x=None, gaze_y=None)
     
     roles = assess.assign_roles()
     assert assess.results[0]["enabled"] == False
@@ -220,17 +220,16 @@ def test_gesture_assessment_failure():
     assert roles["cancel"] == "reserved_zone_dwell"
 
 def test_declined_gesture_stays_disabled_with_high_reliability():
-    assess = GestureAssessment()
+    assess = GestureAssessment(gaze_position_available=False)
     assess.start()
     assess.user_ready()
     
     # Measure a high success rate (3 successes)
     t = 1000.0
     for _ in range(3):
-        # Trigger long blink
-        assess.process_sample(GazeSample(t=t, seq=1, ok=True, ear={"left": 0.1, "right": 0.1}))
+        assess.process_sample(GazeSample(t=t, seq=1, ok=True, ear={"left": 0.1, "right": 0.1}), gaze_x=None, gaze_y=None)
         t += 0.5
-        assess.process_sample(GazeSample(t=t, seq=2, ok=True, ear={"left": 0.1, "right": 0.1}))
+        assess.process_sample(GazeSample(t=t, seq=2, ok=True, ear={"left": 0.3, "right": 0.3}), gaze_x=None, gaze_y=None)
         t += 1.0
 
     assert assess.successes == 3
@@ -273,14 +272,15 @@ def test_online_recalibrator():
     assert len(recalibrator.activation_history) == 1
 
 def test_assessment_standalone_rerun():
-    assess = GestureAssessment()
+    assess = GestureAssessment(gaze_position_available=False)
     assess.start()
     
     # Drive to completion by declining all
     while assess.state != "DONE":
         assess.user_declines()
         
-    assert len(assess.results) == 2 # 2 gestures in candidate set
+    # Without a gaze position only the two closure gestures can be presented.
+    assert len(assess.results) == 2
     
     # Rerun
     assess.start()

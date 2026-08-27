@@ -37,6 +37,10 @@ def _serialize_sample(sample: GazeSample) -> str:
         data["ear"] = sample.ear
     if sample.ipd_px is not None:
         data["ipd_px"] = sample.ipd_px
+    # The capture width must survive a round trip. Viewing distance cannot be derived
+    # without it, and a replayed session that omits it yields no distance at all.
+    if sample.frame_width is not None:
+        data["frame_width"] = sample.frame_width
     if sample.conf is not None:
         data["conf"] = sample.conf
         

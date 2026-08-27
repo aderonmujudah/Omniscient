@@ -19,6 +19,14 @@ class ExtendedClosureDetector:
         return "extended_closure"
 
     @property
+    def requires_gaze_position(self) -> bool:
+        return False
+
+    @property
+    def can_fire(self) -> bool:
+        return self.CLOSURE_MIN_S < self.CLOSURE_MAX_S
+
+    @property
     def latched_position(self) -> tuple[float, float]:
         return (self._latched_x, self._latched_y)
 

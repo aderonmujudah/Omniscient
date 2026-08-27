@@ -4,186 +4,510 @@
   "description": "Schema for all messages between engine and overlay. Single source of truth for the wire format.",
   "oneOf": [
     {
+      "title": "GazeSample",
+      "description": "A single conditioned gaze sample as emitted by a source.",
       "type": "object",
       "properties": {
-        "event_type": { "const": "GAZE_MOVE" },
-        "timestamp": { "type": "number" },
-        "x": { "type": "number" },
-        "y": { "type": "number" }
+        "t": {
+          "type": "number",
+          "description": "Monotonic seconds at frame capture"
+        },
+        "seq": {
+          "type": "integer",
+          "description": "Monotonically increasing sequence number"
+        },
+        "ok": {
+          "type": "boolean",
+          "description": "Face detected this frame"
+        },
+        "condition": {
+          "type": [
+            "string",
+            "null"
+          ],
+          "description": "Optional condition string, e.g. 'low_light'"
+        },
+        "eyes": {
+          "type": "object",
+          "properties": {
+            "left": {
+              "$ref": "#/definitions/EyeGeometry"
+            },
+            "right": {
+              "$ref": "#/definitions/EyeGeometry"
+            }
+          },
+          "required": [
+            "left",
+            "right"
+          ]
+        },
+        "ear": {
+          "type": "object",
+          "properties": {
+            "left": {
+              "type": "number"
+            },
+            "right": {
+              "type": "number"
+            }
+          },
+          "required": [
+            "left",
+            "right"
+          ]
+        },
+        "ipd_px": {
+          "type": "number"
+        },
+        "conf": {
+          "type": "number"
+        },
+        "frame_width": {
+          "type": [
+            "integer",
+            "null"
+          ],
+          "description": "Width in pixels of the frame this sample was decoded from."
+        }
       },
-      "required": ["event_type", "timestamp", "x", "y"],
+      "required": [
+        "t",
+        "seq",
+        "ok"
+      ]
+    },
+    {
+      "type": "object",
+      "properties": {
+        "event_type": {
+          "const": "GAZE_MOVE"
+        },
+        "timestamp": {
+          "type": "number"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "event_type",
+        "timestamp",
+        "x",
+        "y"
+      ],
       "additionalProperties": false
     },
     {
       "type": "object",
       "properties": {
-        "event_type": { "const": "FIXATION_START" },
-        "timestamp": { "type": "number" },
-        "x": { "type": "number" },
-        "y": { "type": "number" }
+        "event_type": {
+          "const": "FIXATION_START"
+        },
+        "timestamp": {
+          "type": "number"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
       },
-      "required": ["event_type", "timestamp", "x", "y"],
+      "required": [
+        "event_type",
+        "timestamp",
+        "x",
+        "y"
+      ],
       "additionalProperties": false
     },
     {
       "type": "object",
       "properties": {
-        "event_type": { "const": "FIXATION_END" },
-        "timestamp": { "type": "number" },
-        "x": { "type": "number" },
-        "y": { "type": "number" },
-        "duration_ms": { "type": "number" }
+        "event_type": {
+          "const": "FIXATION_END"
+        },
+        "timestamp": {
+          "type": "number"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "duration_ms": {
+          "type": "number"
+        }
       },
-      "required": ["event_type", "timestamp", "x", "y", "duration_ms"],
+      "required": [
+        "event_type",
+        "timestamp",
+        "x",
+        "y",
+        "duration_ms"
+      ],
       "additionalProperties": false
     },
     {
       "type": "object",
       "properties": {
-        "event_type": { "const": "SACCADE" },
-        "timestamp": { "type": "number" },
-        "start_x": { "type": "number" },
-        "start_y": { "type": "number" },
-        "end_x": { "type": "number" },
-        "end_y": { "type": "number" }
+        "event_type": {
+          "const": "SACCADE"
+        },
+        "timestamp": {
+          "type": "number"
+        },
+        "start_x": {
+          "type": "number"
+        },
+        "start_y": {
+          "type": "number"
+        },
+        "end_x": {
+          "type": "number"
+        },
+        "end_y": {
+          "type": "number"
+        }
       },
-      "required": ["event_type", "timestamp", "start_x", "start_y", "end_x", "end_y"],
+      "required": [
+        "event_type",
+        "timestamp",
+        "start_x",
+        "start_y",
+        "end_x",
+        "end_y"
+      ],
       "additionalProperties": false
     },
     {
       "type": "object",
       "properties": {
-        "event_type": { "const": "BLINK" },
-        "timestamp": { "type": "number" },
-        "duration_ms": { "type": "number" }
+        "event_type": {
+          "const": "BLINK"
+        },
+        "timestamp": {
+          "type": "number"
+        },
+        "duration_ms": {
+          "type": "number"
+        }
       },
-      "required": ["event_type", "timestamp", "duration_ms"],
+      "required": [
+        "event_type",
+        "timestamp",
+        "duration_ms"
+      ],
       "additionalProperties": false
     },
     {
       "type": "object",
       "properties": {
-        "event_type": { "const": "DWELL_START" },
-        "timestamp": { "type": "number" },
-        "zone_id": { "type": "string" },
-        "x": { "type": "number" },
-        "y": { "type": "number" }
+        "event_type": {
+          "const": "DWELL_START"
+        },
+        "timestamp": {
+          "type": "number"
+        },
+        "zone_id": {
+          "type": "string"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
       },
-      "required": ["event_type", "timestamp", "zone_id", "x", "y"],
+      "required": [
+        "event_type",
+        "timestamp",
+        "zone_id",
+        "x",
+        "y"
+      ],
       "additionalProperties": false
     },
     {
       "type": "object",
       "properties": {
-        "event_type": { "const": "DWELL_PROGRESS" },
-        "timestamp": { "type": "number" },
-        "zone_id": { "type": "string" },
-        "progress": { "type": "number", "minimum": 0.0, "maximum": 1.0 }
+        "event_type": {
+          "const": "DWELL_PROGRESS"
+        },
+        "timestamp": {
+          "type": "number"
+        },
+        "zone_id": {
+          "type": "string"
+        },
+        "progress": {
+          "type": "number",
+          "minimum": 0.0,
+          "maximum": 1.0
+        }
       },
-      "required": ["event_type", "timestamp", "zone_id", "progress"],
+      "required": [
+        "event_type",
+        "timestamp",
+        "zone_id",
+        "progress"
+      ],
       "additionalProperties": false
     },
     {
       "type": "object",
       "properties": {
-        "event_type": { "const": "DWELL_COMPLETE" },
-        "timestamp": { "type": "number" },
-        "zone_id": { "type": "string" }
+        "event_type": {
+          "const": "DWELL_COMPLETE"
+        },
+        "timestamp": {
+          "type": "number"
+        },
+        "zone_id": {
+          "type": "string"
+        }
       },
-      "required": ["event_type", "timestamp", "zone_id"],
+      "required": [
+        "event_type",
+        "timestamp",
+        "zone_id"
+      ],
       "additionalProperties": false
     },
     {
       "type": "object",
       "properties": {
-        "event_type": { "const": "DWELL_CANCEL" },
-        "timestamp": { "type": "number" },
-        "zone_id": { "type": "string" }
+        "event_type": {
+          "const": "DWELL_CANCEL"
+        },
+        "timestamp": {
+          "type": "number"
+        },
+        "zone_id": {
+          "type": "string"
+        }
       },
-      "required": ["event_type", "timestamp", "zone_id"],
+      "required": [
+        "event_type",
+        "timestamp",
+        "zone_id"
+      ],
       "additionalProperties": false
     },
     {
       "type": "object",
       "properties": {
-        "event_type": { "const": "GESTURE" },
-        "timestamp": { "type": "number" },
-        "role": { "type": "string", "enum": ["ENGAGE", "CANCEL", "MENU"] }
+        "event_type": {
+          "const": "GESTURE"
+        },
+        "timestamp": {
+          "type": "number"
+        },
+        "role": {
+          "type": "string",
+          "enum": [
+            "ENGAGE",
+            "CANCEL",
+            "MENU"
+          ]
+        }
       },
-      "required": ["event_type", "timestamp", "role"],
+      "required": [
+        "event_type",
+        "timestamp",
+        "role"
+      ],
       "additionalProperties": false
     },
     {
       "type": "object",
       "properties": {
-        "event_type": { "const": "TRACKING_LOST" },
-        "timestamp": { "type": "number" }
+        "event_type": {
+          "const": "TRACKING_LOST"
+        },
+        "timestamp": {
+          "type": "number"
+        }
       },
-      "required": ["event_type", "timestamp"],
+      "required": [
+        "event_type",
+        "timestamp"
+      ],
       "additionalProperties": false
     },
     {
       "type": "object",
       "properties": {
-        "event_type": { "const": "TRACKING_RESUMED" },
-        "timestamp": { "type": "number" },
-        "x": { "type": "number" },
-        "y": { "type": "number" }
+        "event_type": {
+          "const": "TRACKING_RESUMED"
+        },
+        "timestamp": {
+          "type": "number"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
       },
-      "required": ["event_type", "timestamp", "x", "y"],
+      "required": [
+        "event_type",
+        "timestamp",
+        "x",
+        "y"
+      ],
       "additionalProperties": false
     },
     {
       "type": "object",
       "properties": {
-        "event_type": { "const": "STATE_CHANGE" },
-        "timestamp": { "type": "number" },
-        "from_state": { "type": "string" },
-        "to_state": { "type": "string" }
+        "event_type": {
+          "const": "STATE_CHANGE"
+        },
+        "timestamp": {
+          "type": "number"
+        },
+        "from_state": {
+          "type": "string"
+        },
+        "to_state": {
+          "type": "string"
+        }
       },
-      "required": ["event_type", "timestamp", "from_state", "to_state"],
+      "required": [
+        "event_type",
+        "timestamp",
+        "from_state",
+        "to_state"
+      ],
       "additionalProperties": false
     },
     {
       "type": "object",
       "properties": {
-        "event_type": { "const": "CALIBRATION_START" },
-        "timestamp": { "type": "number" }
+        "event_type": {
+          "const": "CALIBRATION_START"
+        },
+        "timestamp": {
+          "type": "number"
+        }
       },
-      "required": ["event_type", "timestamp"],
+      "required": [
+        "event_type",
+        "timestamp"
+      ],
       "additionalProperties": false
     },
     {
       "type": "object",
       "properties": {
-        "event_type": { "const": "CALIBRATION_POINT" },
-        "timestamp": { "type": "number" },
-        "point_index": { "type": "integer" },
-        "x": { "type": "number" },
-        "y": { "type": "number" }
+        "event_type": {
+          "const": "CALIBRATION_POINT"
+        },
+        "timestamp": {
+          "type": "number"
+        },
+        "point_index": {
+          "type": "integer"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
       },
-      "required": ["event_type", "timestamp", "point_index", "x", "y"],
+      "required": [
+        "event_type",
+        "timestamp",
+        "point_index",
+        "x",
+        "y"
+      ],
       "additionalProperties": false
     },
     {
       "type": "object",
       "properties": {
-        "event_type": { "const": "CALIBRATION_COMPLETE" },
-        "timestamp": { "type": "number" },
-        "profile_id": { "type": "string" }
+        "event_type": {
+          "const": "CALIBRATION_COMPLETE"
+        },
+        "timestamp": {
+          "type": "number"
+        },
+        "profile_id": {
+          "type": "string"
+        }
       },
-      "required": ["event_type", "timestamp", "profile_id"],
+      "required": [
+        "event_type",
+        "timestamp",
+        "profile_id"
+      ],
       "additionalProperties": false
     },
     {
       "type": "object",
       "properties": {
-        "event_type": { "const": "CALIBRATION_FAILED" },
-        "timestamp": { "type": "number" },
-        "reason": { "type": "string" }
+        "event_type": {
+          "const": "CALIBRATION_FAILED"
+        },
+        "timestamp": {
+          "type": "number"
+        },
+        "reason": {
+          "type": "string"
+        }
       },
-      "required": ["event_type", "timestamp", "reason"],
+      "required": [
+        "event_type",
+        "timestamp",
+        "reason"
+      ],
       "additionalProperties": false
     }
-  ]
+  ],
+  "definitions": {
+    "Point2D": {
+      "type": "array",
+      "items": {
+        "type": "number"
+      },
+      "minItems": 2,
+      "maxItems": 2
+    },
+    "EyeGeometry": {
+      "type": "object",
+      "properties": {
+        "iris": {
+          "$ref": "#/definitions/Point2D"
+        },
+        "inner": {
+          "$ref": "#/definitions/Point2D"
+        },
+        "outer": {
+          "$ref": "#/definitions/Point2D"
+        },
+        "top": {
+          "$ref": "#/definitions/Point2D"
+        },
+        "bottom": {
+          "$ref": "#/definitions/Point2D"
+        }
+      },
+      "required": [
+        "iris",
+        "inner",
+        "outer",
+        "top",
+        "bottom"
+      ]
+    }
+  }
 }

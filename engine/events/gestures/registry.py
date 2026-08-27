@@ -4,24 +4,28 @@ The registry is the only place that knows which gesture is assigned to which rol
 Nothing outside the gesture package sees gesture names.
 """
 
+import logging
 from typing import Dict, List, Optional
 from engine.sources.base import GazeSample
 from engine.events.gestures.base import Role, GestureEvent
 from engine.events.gestures.long_blink import LongBlinkDetector
 from engine.events.gestures.extended_closure import ExtendedClosureDetector
 from engine.events.gestures.off_screen_glance import OffScreenGlanceDetector
-from engine.events.gestures.smooth_pursuit import SmoothPursuitDetector
 from engine.events.gestures.gaze_stroke import GazeStrokeDetector
 from engine.events.gestures.reserved_zone_dwell import ReservedZoneDwellDetector
 
+logger = logging.getLogger(__name__)
+
 
 _DETECTOR_FACTORIES = {
-    "long_blink": lambda kw: LongBlinkDetector(ear_threshold=kw.get("ear_threshold", 0.2)),
+    "long_blink": lambda kw: LongBlinkDetector(
+        ear_threshold=kw.get("ear_threshold", 0.2),
+        **({"closure_min_s": kw["threshold_ms"] / 1000.0} if kw.get("threshold_ms") else {}),
+    ),
     "extended_closure": lambda kw: ExtendedClosureDetector(ear_threshold=kw.get("ear_threshold", 0.2)),
     "off_screen_glance": lambda kw: OffScreenGlanceDetector(
         screen_w=kw["screen_w"], screen_h=kw["screen_h"]
     ),
-    "smooth_pursuit": lambda kw: SmoothPursuitDetector(),
     "gaze_stroke": lambda kw: GazeStrokeDetector(),
 }
 
@@ -36,16 +40,21 @@ class GestureRegistry:
         screen_h: int,
         reserved_zones: Dict[str, dict],
         ear_threshold: float = 0.2,
+        *,
+        gesture_params: Dict[str, dict],
     ) -> None:
+        """
+        Args:
+            gesture_params: Per-gesture parameters measured during calibration, keyed by
+                gesture name. Required rather than optional: a detector constructed
+                without its measured parameters silently falls back to a generic band,
+                discarding the measurement the assessment recorded.
+        """
         self._gesture_detectors: list = []
         self._gesture_role_map: Dict[int, Role] = {}
         self._zone_detector: Optional[ReservedZoneDwellDetector] = None
 
-        factory_kwargs = {
-            "screen_w": screen_w,
-            "screen_h": screen_h,
-            "ear_threshold": ear_threshold,
-        }
+        self._gesture_params = gesture_params
 
         zone_roles: Dict[Role, dict] = {}
 
@@ -59,7 +68,19 @@ class GestureRegistry:
                 if role_str in reserved_zones:
                     zone_roles[role] = reserved_zones[role_str]
             elif gesture_name in _DETECTOR_FACTORIES:
+                factory_kwargs = {
+                    "screen_w": screen_w,
+                    "screen_h": screen_h,
+                    "ear_threshold": ear_threshold,
+                }
+                factory_kwargs.update(gesture_params.get(gesture_name, {}))
                 det = _DETECTOR_FACTORIES[gesture_name](factory_kwargs)
+                if not det.can_fire:
+                    logger.warning(
+                        "Gesture %s cannot fire and was not assigned to role %s.",
+                        gesture_name, role_str,
+                    )
+                    continue
                 det_id = id(det)
                 self._gesture_detectors.append(det)
                 self._gesture_role_map[det_id] = role

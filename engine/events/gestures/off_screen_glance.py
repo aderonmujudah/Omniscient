@@ -47,6 +47,14 @@ class OffScreenGlanceDetector:
         return "off_screen_glance"
 
     @property
+    def requires_gaze_position(self) -> bool:
+        return True
+
+    @property
+    def can_fire(self) -> bool:
+        return True
+
+    @property
     def latched_position(self) -> tuple[float, float]:
         return (self._latched_x, self._latched_y)
 

@@ -45,3 +45,21 @@ class GestureDetector(Protocol):
     def update_gaze_position(self, x: float, y: float) -> None:
         """Update the last known gaze position from calibrated coordinates."""
         ...
+
+    @property
+    def requires_gaze_position(self) -> bool:
+        """True when detection depends on calibrated screen coordinates.
+
+        A detector that requires a gaze position cannot be assessed or dispatched
+        unless the caller supplies one on every sample.
+        """
+        ...
+
+    @property
+    def can_fire(self) -> bool:
+        """True when the detector has a reachable path that returns its name.
+
+        A detector that cannot fire must never be offered to a user as a candidate
+        gesture, since every attempt would be recorded as a failure the user caused.
+        """
+        ...

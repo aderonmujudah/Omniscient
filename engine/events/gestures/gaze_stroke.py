@@ -6,11 +6,14 @@ class GazeStrokeDetector:
         self,
         min_displacement_px: float = 200.0,
         max_duration_s: float = 0.5,
-        direction_tolerance_deg: float = 30.0
     ) -> None:
+        """
+        A stroke is a displacement of at least min_displacement_px completed within
+        max_duration_s. Direction is not discriminated, so the detector reports a single
+        undifferentiated stroke rather than one gesture per direction.
+        """
         self._min_displacement_px = min_displacement_px
         self._max_duration_s = max_duration_s
-        self._direction_tolerance_deg = direction_tolerance_deg
         
         self._history: List[Tuple[float, float, float]] = []
         self._latched_x: float = 0.0
@@ -21,6 +24,14 @@ class GazeStrokeDetector:
     @property
     def name(self) -> str:
         return "gaze_stroke"
+
+    @property
+    def requires_gaze_position(self) -> bool:
+        return True
+
+    @property
+    def can_fire(self) -> bool:
+        return True
 
     @property
     def latched_position(self) -> tuple[float, float]:

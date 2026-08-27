@@ -1,4 +1,4 @@
-"""Tests for Scope 3 — Signal Conditioning and Event Detection.
+"""Tests for signal conditioning and event detection.
 
 Covers pass marks PM-3.1 through PM-3.17.
 
@@ -31,6 +31,7 @@ from engine.events.gestures.off_screen_glance import OffScreenGlanceDetector
 from engine.events.gestures.smooth_pursuit import SmoothPursuitDetector
 from engine.events.gestures.gaze_stroke import GazeStrokeDetector
 from engine.events.gestures.reserved_zone_dwell import ReservedZoneDwellDetector
+from engine.calibration.assessment import GestureAssessment, CANDIDATE_GESTURES
 
 
 # ---------------------------------------------------------------------------
@@ -42,8 +43,6 @@ def make_sample(
     ok: bool = True,
     ear_left: float = 0.3,
     ear_right: float = 0.3,
-    gaze_x: float = 500.0,
-    gaze_y: float = 400.0,
     frame_width: int = 1280,
     seq: int = 0,
 ) -> GazeSample:
@@ -62,9 +61,10 @@ def closed_sample(t: float, seq: int = 0) -> GazeSample:
     return make_sample(t=t, ear_left=0.1, ear_right=0.1, seq=seq)
 
 
-def open_sample(t: float, seq: int = 0, gaze_x: float = 500.0, gaze_y: float = 400.0) -> GazeSample:
-    """Sample with eyes open."""
-    return make_sample(t=t, gaze_x=gaze_x, gaze_y=gaze_y, seq=seq)
+def open_sample(t: float, seq: int = 0) -> GazeSample:
+    """Sample with eyes open. A sample carries no screen position: calibrated gaze is
+    supplied separately by whichever component owns the calibration model."""
+    return make_sample(t=t, seq=seq)
 
 
 def lost_sample(t: float, seq: int = 0) -> GazeSample:
@@ -520,6 +520,7 @@ class TestAllRolesViaReservedZoneDwell:
             screen_w=1920,
             screen_h=1080,
             reserved_zones=reserved_zones,
+            gesture_params={},
         )
 
         fired_roles = set()
@@ -830,6 +831,7 @@ class TestGestureRegistry:
             screen_w=1920,
             screen_h=1080,
             reserved_zones=reserved_zones,
+            gesture_params={},
         )
 
         registry.process_sample(open_sample(t=0.0), gaze_x=500.0, gaze_y=400.0)
@@ -854,12 +856,14 @@ class TestGestureRegistry:
         reg1 = GestureRegistry(
             role_assignment={"ENGAGE": "long_blink", "CANCEL": "reserved_zone_dwell", "MENU": "reserved_zone_dwell"},
             screen_w=1920, screen_h=1080, reserved_zones=zones,
+            gesture_params={},
         )
 
         # Config 2: long_blink -> CANCEL
         reg2 = GestureRegistry(
             role_assignment={"ENGAGE": "reserved_zone_dwell", "CANCEL": "long_blink", "MENU": "reserved_zone_dwell"},
             screen_w=1920, screen_h=1080, reserved_zones=zones,
+            gesture_params={},
         )
 
         def trigger_blink(reg: GestureRegistry) -> List[GestureEvent]:
@@ -903,3 +907,126 @@ class TestDispatcher:
 
         assert len(ws_messages) == 1
         assert ws_messages[0]["event_type"] == "TRACKING_LOST"
+
+
+# ---------------------------------------------------------------------------
+# The assessment must drive the same detector path that dispatch uses
+# ---------------------------------------------------------------------------
+
+class TestAssessmentDrivesDetectors:
+    """A gesture that fires only when a test calls its detector directly is not available
+    to a user. These tests drive the assessment itself."""
+
+    def _advance_to(self, assess, gesture_name):
+        while assess.candidates[assess.current_idx] != gesture_name:
+            assess.user_declines(current_t=0.0)
+
+    def test_non_closure_gesture_fires_through_assessment(self):
+        assess = GestureAssessment(gaze_position_available=True)
+        assess.start()
+        self._advance_to(assess, "off_screen_glance")
+        assess.user_ready(current_t=1000.0)
+
+        assess.process_sample(open_sample(t=1000.0), gaze_x=960.0, gaze_y=540.0)
+        assess.process_sample(open_sample(t=1000.1), gaze_x=-200.0, gaze_y=540.0)
+        assess.process_sample(open_sample(t=1000.3), gaze_x=-200.0, gaze_y=540.0)
+        assess.process_sample(open_sample(t=1000.5), gaze_x=960.0, gaze_y=540.0)
+
+        assert assess.successes == 1
+
+    def test_position_gesture_records_no_failure_when_position_is_absent(self):
+        """A gesture that cannot be presented must not be offered, rather than offered and
+        then recorded as one the user failed."""
+        assess = GestureAssessment(gaze_position_available=False)
+        assess.start()
+        while assess.state != "DONE":
+            assess.user_declines(current_t=0.0)
+
+        assessed = {r["id"] for r in assess.results}
+        assert "off_screen_glance" not in assessed
+        assert "gaze_stroke" not in assessed
+
+    def test_measured_threshold_governs_detection(self):
+        """A closure that clears the generic default band but falls short of the measured
+        per-user threshold must not be recognised."""
+        assess = GestureAssessment(long_blink_threshold_ms=600.0, gaze_position_available=False)
+        assess.start()
+        assess.user_ready(current_t=1000.0)
+
+        assess.process_sample(closed_sample(t=1000.0), gaze_x=None, gaze_y=None)
+        assess.process_sample(open_sample(t=1000.4), gaze_x=None, gaze_y=None)
+
+        assert assess.detectors["long_blink"].closure_min_s == 0.6
+        assert assess.successes == 0
+
+    def test_measured_threshold_is_reported_as_it_is_applied(self):
+        assess = GestureAssessment(long_blink_threshold_ms=600.0, gaze_position_available=False)
+        params = assess._detector_params("long_blink")
+        assert params["threshold_ms"] == assess.detectors["long_blink"].closure_min_s * 1000.0
+
+
+class TestNoUnfireableCandidate:
+
+    def test_every_presented_candidate_can_fire(self):
+        for available in (False, True):
+            assess = GestureAssessment(gaze_position_available=available)
+            for name in assess.candidates:
+                detector = assess.detectors[name]
+                assert detector.can_fire, f"{name} is presented but cannot fire"
+                if detector.requires_gaze_position:
+                    assert available, f"{name} needs a gaze position that is unavailable"
+
+    def test_smooth_pursuit_is_declared_but_not_presented(self):
+        assess = GestureAssessment(gaze_position_available=True)
+        assert "smooth_pursuit" in CANDIDATE_GESTURES
+        assert "smooth_pursuit" not in assess.candidates
+
+    def test_a_non_closure_candidate_is_presented(self):
+        assess = GestureAssessment(gaze_position_available=True)
+        assert any(
+            assess.detectors[name].requires_gaze_position for name in assess.candidates
+        ), "no candidate is available to a user who cannot close their eyes on demand"
+
+
+class TestRegistryAppliesMeasuredParameters:
+    """The threshold measured during assessment must reach the detector that runs at
+    dispatch time, otherwise the measurement is recorded and then discarded."""
+
+    ROLES = {"ENGAGE": "long_blink", "CANCEL": "reserved_zone_dwell", "MENU": "reserved_zone_dwell"}
+
+    def _drive_closure(self, registry, closure_s):
+        registry.process_sample(open_sample(t=0.0), gaze_x=500.0, gaze_y=400.0)
+        registry.process_sample(closed_sample(t=0.1), gaze_x=500.0, gaze_y=400.0)
+        return registry.process_sample(
+            open_sample(t=0.1 + closure_s), gaze_x=500.0, gaze_y=400.0
+        )
+
+    def test_measured_threshold_suppresses_a_short_closure(self):
+        registry = GestureRegistry(
+            role_assignment=self.ROLES,
+            screen_w=1920, screen_h=1080, reserved_zones={},
+            gesture_params={"long_blink": {"threshold_ms": 600.0}},
+        )
+        assert self._drive_closure(registry, 0.4) == []
+
+    def test_same_closure_fires_under_the_default_band(self):
+        registry = GestureRegistry(
+            role_assignment=self.ROLES,
+            screen_w=1920, screen_h=1080, reserved_zones={},
+            gesture_params={},
+        )
+        events = self._drive_closure(registry, 0.4)
+        assert len(events) == 1
+        assert events[0].role == Role.ENGAGE
+
+    def test_unfireable_gesture_is_not_assigned_to_a_role(self):
+        registry = GestureRegistry(
+            role_assignment={"ENGAGE": "smooth_pursuit"},
+            screen_w=1920, screen_h=1080, reserved_zones={},
+            gesture_params={},
+        )
+        for i in range(40):
+            events = registry.process_sample(
+                open_sample(t=i * 0.033), gaze_x=100.0 + i * 20.0, gaze_y=540.0
+            )
+            assert events == []

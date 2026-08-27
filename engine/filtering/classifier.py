@@ -3,7 +3,7 @@
 Combines fixation detection, blink detection, and tracking status
 to assign one of four labels to each gaze sample.
 
-Priority order (from project-flow.md §7.4):
+Priority order, highest first:
 1. LOST — face or gaze not detected
 2. BLINK — eyes closed (EAR below threshold)
 3. FIXATION — gaze within an active fixation
