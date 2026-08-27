@@ -17,12 +17,22 @@ from engine.events.gestures.reserved_zone_dwell import ReservedZoneDwellDetector
 logger = logging.getLogger(__name__)
 
 
+def _closure_bounds(kw: dict) -> dict:
+    """The EAR bounds a closure detector is built with, carrying only what was measured.
+
+    An unmeasured bound is left out rather than defaulted here, so the detector's own value
+    applies and there is one place holding it rather than two that can disagree.
+    """
+    return {name: kw[name] for name in ("ear_threshold", "ear_reopen")
+            if kw.get(name) is not None}
+
+
 _DETECTOR_FACTORIES = {
     "long_blink": lambda kw: LongBlinkDetector(
-        ear_threshold=kw.get("ear_threshold", 0.2),
+        **_closure_bounds(kw),
         **({"closure_min_s": kw["threshold_ms"] / 1000.0} if kw.get("threshold_ms") else {}),
     ),
-    "extended_closure": lambda kw: ExtendedClosureDetector(ear_threshold=kw.get("ear_threshold", 0.2)),
+    "extended_closure": lambda kw: ExtendedClosureDetector(**_closure_bounds(kw)),
     "off_screen_glance": lambda kw: OffScreenGlanceDetector(
         screen_w=kw["screen_w"], screen_h=kw["screen_h"]
     ),
@@ -52,10 +62,11 @@ class GestureRegistry:
         screen_w: int,
         screen_h: int,
         reserved_zones: Dict[str, dict],
-        ear_threshold: float = 0.2,
+        ear_threshold: Optional[float] = None,
         *,
         gesture_params: Dict[str, dict],
         closure_threshold_ms: Optional[float] = None,
+        ear_reopen: Optional[float] = None,
     ) -> None:
         """
         Args:
@@ -66,6 +77,10 @@ class GestureRegistry:
             closure_threshold_ms: The user's measured deliberate-closure threshold. Passed as
                 a measurement rather than as a named gesture's parameter, so that callers
                 outside this package never need to know which detectors consume it.
+            ear_threshold: The user's measured closing bound, and ear_reopen the bound a
+                closure already under way must clear to be treated as ended. Both are
+                properties of a person's eyelids rather than of the product, and either left
+                unset leaves the detector's own default in place.
         """
         self._gesture_detectors: list = []
         self._gesture_role_map: Dict[int, Role] = {}
@@ -90,6 +105,7 @@ class GestureRegistry:
                     "screen_w": screen_w,
                     "screen_h": screen_h,
                     "ear_threshold": ear_threshold,
+                    "ear_reopen": ear_reopen,
                 }
                 if closure_threshold_ms is not None:
                     factory_kwargs["threshold_ms"] = closure_threshold_ms

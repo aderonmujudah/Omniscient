@@ -14,7 +14,24 @@ from engine.sources.base import GazeSample
 
 # Upper bound of the long-blink band in seconds. This is the boundary with an extended
 # closure, not a tuned value: a closure longer than this is a different gesture.
-DEFAULT_CLOSURE_MAX_S = 0.8
+#
+# Raised from 0.8 s on 2026-08-27. Measured on the target subject, a deliberate long blink runs
+# 1964 to 2600 ms while ordinary blinking ceils at 836 ms, so the former bound sat below every
+# deliberate closure the subject produced and above every threshold that would separate the two
+# populations: can_fire went False and the gesture was withheld from a subject who performs it
+# reliably. Measured from recordings 02 and 06, n=44 ordinary blinks and n=13 cued closures.
+DEFAULT_CLOSURE_MAX_S = 3.1
+# Closing bound. Measured on the target subject over four minutes of ordinary blinking and
+# thirteen cued two-second closures: at 0.18 the two populations separate by 452 ms, against
+# 174 ms at the 0.2 of Soukupova and Cech (2016), whose figure is a population mean rather
+# than a per-user value. INTERIM: this belongs in the profile, not in a default.
+DEFAULT_EAR_CLOSE = 0.18
+
+# EAR above which a closure already under way is treated as ended. Held above the closing bound
+# so that a closure is not ended by the EAR wandering across a single value: measured on the
+# target subject, a held closure sits between 0.14 and 0.21 and crossed a lone 0.2 bound
+# repeatedly, splitting six of thirteen cued holds into as many as six runs.
+DEFAULT_EAR_REOPEN = 0.24
 
 # Lower bound used when no per-user threshold has been measured. UNTUNED.
 DEFAULT_CLOSURE_MIN_S = 0.3
@@ -24,11 +41,13 @@ class LongBlinkDetector:
 
     def __init__(
         self,
-        ear_threshold: float = 0.2,
+        ear_threshold: float = DEFAULT_EAR_CLOSE,
         closure_min_s: float = DEFAULT_CLOSURE_MIN_S,
         closure_max_s: float = DEFAULT_CLOSURE_MAX_S,
+        ear_reopen: float = DEFAULT_EAR_REOPEN,
     ) -> None:
         self._ear_threshold = ear_threshold
+        self._ear_reopen = max(ear_reopen, ear_threshold)
         self._closure_min_s = closure_min_s
         self._closure_max_s = closure_max_s
         self._closure_start_t: Optional[float] = None
@@ -92,7 +111,10 @@ class LongBlinkDetector:
     def _is_closed(self, sample: GazeSample) -> bool:
         if not sample.ok or sample.ear is None:
             return False
-        return sample.ear["left"] < self._ear_threshold and sample.ear["right"] < self._ear_threshold
+        # A closure under way is held open to the reopen bound, so the eye must be
+        # demonstrably open again to end it rather than merely ambiguous.
+        bound = self._ear_reopen if self._was_closed else self._ear_threshold
+        return sample.ear["left"] < bound and sample.ear["right"] < bound
 
     def reset(self) -> None:
         self._closure_start_t = None

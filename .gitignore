@@ -7,3 +7,4 @@ overlay/node_modules
 # reproducible only by recording another person; the measurements drawn from it are
 # written up instead.
 recordings/
+.venv/

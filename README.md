@@ -61,14 +61,47 @@ dedicated eye tracker.
 Hardware eye trackers are not required, but the gaze source sits behind an interface so one
 can be added without changes elsewhere in the system.
 
+## Setup
+
+1. Install Python 3.10+ and Node.js.
+2. Set up the Python environment for the tracking engine:
+   ```bash
+   python -m venv .venv
+   # On Windows: .venv\Scripts\activate
+   # On Linux/macOS: source .venv/bin/activate
+   pip install -r docker/requirements-test.txt
+   ```
+3. Set up the Electron overlay:
+   ```bash
+   cd overlay
+   npm install
+   ```
+
+## Calibration
+
+Omniscient strictly requires a valid profile to operate. It calculates its own accuracy in degrees of visual angle and refuses to store a profile that fails validation.
+
+1. Measure your camera's focal length for accurate degree calculations:
+   ```bash
+   python engine/measure_focal_auto.py
+   ```
+2. Run the calibration sequence:
+   ```bash
+   python engine/calibrate.py --record-file recordings/my_calibration.jsonl
+   ```
+   Follow the targets on screen. A successful run writes to `~/.omniscient/profile.json`.
+
+## Usage
+
+Start the application (this spins up both the tracking engine and the UI overlay):
+```bash
+python start.py
+```
+To stop the application, close the overlay window or press `Ctrl+C` in the terminal.
+
 ## Status
 
-Pre-alpha. The design is complete and implementation has not yet started, so there is
-nothing to install today.
-
-Development proceeds in eight sequential stages: gaze telemetry, calibration and accuracy
-measurement, signal conditioning, the overlay and input path, coarse-to-fine targeting,
-activation and the radial menu, scrolling and recovery, and text entry.
+The core gaze pipeline, calibration sequence, and overlay are assembled and functional end-to-end. Coarse-to-fine targeting and event dispatch are operational. Ongoing measurement determines baseline accuracy across hardware.
 
 ## Contributing
 

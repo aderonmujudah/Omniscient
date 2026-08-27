@@ -32,6 +32,9 @@ class InputBackend(Protocol):
     """
     Interface for synthesizing OS input events.
     """
+    def move(self, x: float, y: float) -> None:
+        pass
+
     def click(self, x: float, y: float, button: str = "left", count: int = 1) -> None:
         pass
         
@@ -57,6 +60,15 @@ class BaseInputBackend(InputBackend):
         elif button == "middle":
             return MOUSEEVENTF_MIDDLEDOWN, MOUSEEVENTF_MIDDLEUP
         return MOUSEEVENTF_LEFTDOWN, MOUSEEVENTF_LEFTUP
+
+    def move(self, x: float, y: float) -> None:
+        """Places the pointer without pressing anything.
+
+        Called for every mapped sample, so the person can see where the engine believes
+        they are looking. A click already carries its own move, so this changes nothing
+        about where a click lands.
+        """
+        self._inject_mouse([MouseInput(x, y, MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE)])
 
     def click(self, x: float, y: float, button: str = "left", count: int = 1) -> None:
         down_flag, up_flag = self._get_button_flags(button)

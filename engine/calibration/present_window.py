@@ -20,6 +20,13 @@ BACKGROUND_COLOUR = "#101010"
 DOT_COLOUR = "#f0f0f0"
 POLL_INTERVAL_MS = 16
 CLOSE_DELAY_MS = 500
+MESSAGE_FONT_PX = 28
+
+# Seconds between the window opening and the first target. The sequence allows SETTLE_TIME_S of
+# 0.3 s per target, which is enough to settle a gaze already on the screen and not enough to
+# find one, so the opening target needs its own allowance rather than a longer settle for every
+# target. It also lets the landmarker finish loading before anything is measured.
+LEAD_IN_S = 6
 
 
 def declare_dpi_awareness() -> None:
@@ -70,6 +77,7 @@ class PresenterWindow:
                                 cursor="none")
         self.canvas.pack(fill="both", expand=True)
         self.dot_id = None
+        self.message_id = None
 
     def render(self) -> None:
         if self.dot_id is not None:
@@ -81,6 +89,17 @@ class PresenterWindow:
                 dot.x - DOT_RADIUS_PX, dot.y - DOT_RADIUS_PX,
                 dot.x + DOT_RADIUS_PX, dot.y + DOT_RADIUS_PX,
                 fill=DOT_COLOUR, outline="")
+
+    def show_message(self, text: str) -> None:
+        """Centred text for the lead-in. Cleared before the first target so that nothing but
+        the target is on screen while a window is being collected."""
+        if self.message_id is not None:
+            self.canvas.delete(self.message_id)
+            self.message_id = None
+        if text:
+            self.message_id = self.canvas.create_text(
+                self.width / 2, self.height / 2, text=text, fill=DOT_COLOUR,
+                font=("TkDefaultFont", MESSAGE_FONT_PX), justify="center")
 
     def apply(self, event) -> None:
         if self.logic.apply(event):
@@ -112,10 +131,15 @@ def run_calibration(record_path: str, camera_index: int = 0,
 
     events: queue.Queue = queue.Queue()
     stop = threading.Event()
+    ready = threading.Event()
 
     def capture() -> None:
         try:
             source.start()
+            # Opening the source warms the camera and the landmarker without reading a sample,
+            # so the lead-in costs the subject nothing and the first target is presented to
+            # someone already looking at the screen.
+            ready.wait()
             # The session must be presenting before the first sample is written, or the
             # opening samples would be recorded with no label.
             events.put(session.start())
@@ -149,10 +173,26 @@ def run_calibration(record_path: str, camera_index: int = 0,
 
     def abort(_event=None) -> None:
         stop.set()
+        # Releases the capture thread if the sequence is abandoned during the lead-in, which
+        # would otherwise leave it parked on the event with the camera open.
+        ready.set()
         root.destroy()
 
+    def lead_in(remaining: int) -> None:
+        if stop.is_set():
+            return
+        if remaining > 0:
+            window.show_message("Look at the centre of the screen and hold still.\n\n"
+                                "Follow each dot as it appears.\n\n"
+                                "Starting in %d" % remaining)
+            root.after(1000, lead_in, remaining - 1)
+            return
+        window.show_message("")
+        ready.set()
+        root.after(POLL_INTERVAL_MS, poll)
+
     root.bind("<Escape>", abort)
-    root.after(POLL_INTERVAL_MS, poll)
+    root.after(POLL_INTERVAL_MS, lead_in, LEAD_IN_S)
     root.mainloop()
 
     stop.set()

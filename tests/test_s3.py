@@ -259,7 +259,9 @@ class TestSampleClassifier:
 
 
 # ---------------------------------------------------------------------------
-# PM-3.4: Long blink detector fires between 300 ms and 800 ms
+# PM-3.4: Long blink detector fires between its per-user threshold and 3000 ms.
+# The upper bound is the boundary with an extended closure. Measured on the target subject,
+# ordinary blinking ceils at 1542 ms and a deliberate closure floors at 1994 ms.
 # ---------------------------------------------------------------------------
 
 class TestLongBlink:
@@ -289,14 +291,14 @@ class TestLongBlink:
         assert result is None
 
     def test_extended_closure_does_not_fire(self):
-        """Closure of 1000ms does not fire the long blink detector."""
+        """Closure of 3500ms belongs to the extended closure and does not fire long blink."""
         det = LongBlinkDetector(ear_threshold=0.2)
         det.update_gaze_position(500.0, 400.0)
 
         det.process_sample(open_sample(t=0.0))
         det.process_sample(closed_sample(t=0.1))
-        det.process_sample(closed_sample(t=0.5))
-        result = det.process_sample(open_sample(t=1.1))
+        det.process_sample(closed_sample(t=2.0))
+        result = det.process_sample(open_sample(t=3.6))
 
         assert result is None
 
@@ -317,7 +319,9 @@ class TestLongBlink:
 
 
 # ---------------------------------------------------------------------------
-# PM-3.5: Extended closure detector fires between 800 ms and 2000 ms
+# PM-3.5: Extended closure detector fires between 3000 ms and 6000 ms.
+# Moved to stay disjoint from the long-blink band. UNMEASURED: no closure longer than the cued
+# two-second hold was recorded, so only the lower edge rests on an observation.
 # ---------------------------------------------------------------------------
 
 class TestExtendedClosure:
@@ -328,8 +332,8 @@ class TestExtendedClosure:
 
         det.process_sample(open_sample(t=0.0))
         det.process_sample(closed_sample(t=0.1))
-        det.process_sample(closed_sample(t=0.5))
-        result = det.process_sample(open_sample(t=1.0))
+        det.process_sample(closed_sample(t=2.0))
+        result = det.process_sample(open_sample(t=4.1))
 
         assert result == "extended_closure"
 
@@ -344,13 +348,13 @@ class TestExtendedClosure:
         assert result is None
 
     def test_rest_does_not_fire(self):
-        """Closure > 2000ms is rest, not a gesture."""
+        """Closure > 6000ms is rest, not a gesture."""
         det = ExtendedClosureDetector(ear_threshold=0.2)
         det.update_gaze_position(500.0, 400.0)
 
         det.process_sample(open_sample(t=0.0))
         det.process_sample(closed_sample(t=0.1))
-        result = det.process_sample(open_sample(t=2.5))
+        result = det.process_sample(open_sample(t=6.6))
 
         assert result is None
 

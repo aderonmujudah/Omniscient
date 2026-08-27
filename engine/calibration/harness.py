@@ -6,6 +6,7 @@ from engine.calibration.session import CalibrationSession
 from engine.calibration.model import CalibrationModel
 from engine.calibration.validation import validate_calibration
 from engine.calibration.labels import read_labeled_session, select_accepted, split_fit_val
+from engine.calibration.session import DISPERSION_THRESHOLD
 
 logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
@@ -66,6 +67,31 @@ def run_accuracy_harness(fixture_path: str, screen_w: int, screen_h: int, diag_m
     }
 
 
+def _resolve_threshold(requested: Optional[float], recorded: Optional[float]) -> float:
+    """
+    Settles which acceptance threshold an analysis runs at, and says so.
+
+    A recording made under a loosened threshold contains only windows that threshold admitted.
+    Analysing it under the built-in default silently rejects every one of them and reports too
+    few windows, without naming the value that did the rejecting. The recorded value is
+    therefore what an analysis defaults to; a caller sweeping candidates passes its own.
+    """
+    if requested is not None:
+        return requested
+    if recorded is not None:
+        logger.info(
+            "No dispersion threshold supplied. Analysing at %.4f, the value the recording was "
+            "captured under.", recorded,
+        )
+        return recorded
+    logger.warning(
+        "Recording carries no acceptance threshold and none was supplied. Falling back to the "
+        "built-in %.4f, which is not necessarily the value the recording was made under.",
+        DISPERSION_THRESHOLD,
+    )
+    return DISPERSION_THRESHOLD
+
+
 def run_labeled_harness(fixture_path: str, screen_w: int, screen_h: int, diag_mm: float,
                         dispersion_threshold: Optional[float] = None):
     """
@@ -77,6 +103,10 @@ def run_labeled_harness(fixture_path: str, screen_w: int, screen_h: int, diag_mm
     No blink threshold is reported. A calibration yields on the order of ten blinks, over which
     a high percentile is simply the longest one observed, so that figure comes from a separate
     and longer recording.
+
+    dispersion_threshold selects the acceptance threshold to re-apply. Left unset it takes the
+    one the recording was captured under, which is the only value every window in the recording
+    was actually judged against.
     """
     source = ReplaySource(fixture_path, realtime=False)
     source.start()
@@ -115,12 +145,17 @@ def run_labeled_harness(fixture_path: str, screen_w: int, screen_h: int, diag_mm
     else:
         screen_w, screen_h = labeled.screen_w, labeled.screen_h
 
-    accepted, diverged = select_accepted(labeled.windows, dispersion_threshold)
+    threshold = _resolve_threshold(dispersion_threshold, labeled.dispersion_threshold)
+
+    accepted, diverged = select_accepted(labeled.windows, threshold)
     fit, val = split_fit_val(accepted)
 
     if len(fit) < 5 or not val:
         logger.error(
-            f"Too few accepted windows to analyse: {len(fit)} fit, {len(val)} validation."
+            "Too few accepted windows to analyse at dispersion threshold %.4f: %d fit, %d "
+            "validation, out of %d windows in the recording. The threshold is the gate: a "
+            "recording whose windows are all wider than it yields nothing to fit.",
+            threshold, len(fit), len(val), len(labeled.windows),
         )
         return None
 
@@ -151,7 +186,7 @@ def run_labeled_harness(fixture_path: str, screen_w: int, screen_h: int, diag_mm
         "ipd_px": avg_ipd,
         "has_measured_distance": has_measured_distance,
         "paired_by": "recorded_label",
-        "dispersion_threshold": dispersion_threshold,
+        "dispersion_threshold": threshold,
         "fit_points": len(fit),
         "val_points": len(val),
         "windows_diverged": diverged,

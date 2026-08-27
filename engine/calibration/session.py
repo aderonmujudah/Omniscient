@@ -52,9 +52,11 @@ def sample_feature(sample: GazeSample) -> Optional[tuple[float, float]]:
 
 class CalibrationSession:
     def __init__(self, screen_w: int, screen_h: int,
-                 dispersion_threshold: Optional[float] = None):
+                 dispersion_threshold: Optional[float] = None,
+                 ear_threshold: Optional[float] = None):
         self.screen_w = screen_w
         self.screen_h = screen_h
+        self.ear_threshold = 0.2 if ear_threshold is None else ear_threshold
 
         # Resolved to a concrete number rather than kept as None, because the value is recorded
         # with every sample and a recording that stated "the default" would not say what the
@@ -137,7 +139,7 @@ class CalibrationSession:
         # Process blink
         is_closed = False
         if sample.ok and sample.ear:
-            if sample.ear["left"] < 0.2 and sample.ear["right"] < 0.2:
+            if sample.ear["left"] < self.ear_threshold and sample.ear["right"] < self.ear_threshold:
                 is_closed = True
                 
         if is_closed:

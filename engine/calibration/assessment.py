@@ -27,15 +27,24 @@ class GestureAssessment:
         screen_h: int = 1080,
         *,
         gaze_position_available: bool,
+        ear_threshold: Optional[float] = None,
+        ear_reopen: Optional[float] = None,
     ):
         self.long_blink_threshold_ms = long_blink_threshold_ms
-        ear_threshold = 0.2
+        self.ear_threshold = 0.2 if ear_threshold is None else ear_threshold
+        self.ear_reopen = ear_reopen  # Passed through to detector which falls back if None
+        
+        # Build kwargs for closure detectors
+        closure_kw = {"ear_threshold": self.ear_threshold}
+        if self.ear_reopen is not None:
+            closure_kw["ear_reopen"] = self.ear_reopen
+            
         self.detectors = {
             "long_blink": LongBlinkDetector(
-                ear_threshold=ear_threshold,
+                **closure_kw,
                 closure_min_s=long_blink_threshold_ms / 1000.0,
             ),
-            "extended_closure": ExtendedClosureDetector(ear_threshold=ear_threshold),
+            "extended_closure": ExtendedClosureDetector(**closure_kw),
             "off_screen_glance": OffScreenGlanceDetector(screen_w=screen_w, screen_h=screen_h),
             "smooth_pursuit": SmoothPursuitDetector(),
             "gaze_stroke": GazeStrokeDetector(),

@@ -27,10 +27,10 @@ class SampleClassifier:
     def __init__(
         self,
         fixation_detector: FixationDetector,
-        ear_threshold: float = 0.2,
+        ear_threshold: Optional[float] = None,
     ) -> None:
         self._fixation_detector = fixation_detector
-        self._ear_threshold = ear_threshold
+        self._ear_threshold = 0.2 if ear_threshold is None else ear_threshold
 
     def classify(
         self,

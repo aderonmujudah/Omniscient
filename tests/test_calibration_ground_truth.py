@@ -7,6 +7,7 @@ where it did originally while the acceptance constants are unchanged. Tuning one
 entire purpose of analysing these recordings.
 """
 import json
+import os
 import time
 
 import pytest
@@ -36,7 +37,10 @@ DIAG_MM = 597.0
 FRAME_WIDTH = 1000
 SAMPLE_RATE_HZ = 60.0
 T0 = 1000.0
-UNLABELED_FIXTURE = "/app/fixtures/s2_calibration.jsonl"
+# Resolved from this file rather than from the container mount point, so the suite runs
+# against a virtualenv on a development host as well as inside the container.
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+UNLABELED_FIXTURE = os.path.join(REPO_ROOT, "fixtures", "s2_calibration.jsonl")
 
 # Enough samples for thirteen targets plus the retries these tests provoke. Reaching it means the
 # session never terminated, which the tests catch by asserting on the final state.

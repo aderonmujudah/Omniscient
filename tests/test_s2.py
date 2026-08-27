@@ -11,7 +11,11 @@ from engine.calibration.harness import run_accuracy_harness
 from engine.calibration.online import OnlineRecalibrator
 from engine.sources.base import GazeSample
 
-FIXTURE_PATH = "/app/fixtures/s2_calibration.jsonl"
+# The suite runs both inside the test container, where the repository is mounted at /app, and
+# directly against a virtualenv on a development host. Resolving the fixture from this file
+# rather than from an absolute mount point keeps both paths working.
+REPO_ROOT = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+FIXTURE_PATH = os.path.join(REPO_ROOT, "fixtures", "s2_calibration.jsonl")
 
 def test_calibration_end_to_end_and_validation(tmp_path):
     source = ReplaySource(FIXTURE_PATH)

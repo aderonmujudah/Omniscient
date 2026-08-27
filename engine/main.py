@@ -13,6 +13,7 @@ from engine.calibration.store import load_profile
 from engine.events.dispatcher import EventDispatcher
 from engine.events.dwell import DwellTimer
 from engine.events.emitter import InteractionEmitter
+from engine.events.interaction import EventType
 from engine.events.gestures.registry import GestureRegistry
 from engine.features.eye_features import extract_features
 from engine.filtering.classifier import SampleClassifier
@@ -38,6 +39,31 @@ RESERVED_ZONES = {
     "cancel": {"x": 0.92, "y": 0.0, "w": 0.08, "h": 0.08},
     "menu": {"x": 0.0, "y": 0.0, "w": 0.08, "h": 0.08},
 }
+
+
+class _ReportingInput:
+    """Stands in for the input backend during a dry run.
+
+    Carries the same surface the state machine calls and logs each action with the position it
+    would have been performed at, so a mapping fault is read rather than clicked.
+    """
+
+    def click(self, x, y, button="left", count=1):
+        logger.info("DRY RUN would %s-click x%d at (%.0f, %.0f)", button, count, x, y)
+
+    def drag(self, phase, x, y):
+        logger.info("DRY RUN would drag %s at (%.0f, %.0f)", phase, x, y)
+
+    def scroll(self, x, y, amount):
+        logger.info("DRY RUN would scroll %s at (%.0f, %.0f)", amount, x, y)
+
+    def move(self, x, y):
+        logger.debug("DRY RUN would move to (%.0f, %.0f)", x, y)
+
+    def __getattr__(self, name):
+        def _unsupported(*args, **kwargs):
+            logger.info("DRY RUN would call %s%r", name, args)
+        return _unsupported
 
 
 def build_emitter(profile, dispatcher, rate, capture_backend, input_backend):
@@ -72,6 +98,9 @@ def build_emitter(profile, dispatcher, rate, capture_backend, input_backend):
             "the radial deadzone are both derived from it, so they are provisional until measured.",
             DEFAULT_VIEWING_DIST_MM)
 
+    # Eyelid geometry varies per person, so the closure bounds are read from the profile
+    # beside the duration threshold rather than assumed.
+    blink = profile.get("blink") or {}
     gestures = profile.get("gestures") or {}
     roles = gestures.get("roles") or {}
     gesture_params = {
@@ -86,7 +115,9 @@ def build_emitter(profile, dispatcher, rate, capture_backend, input_backend):
         screen_h=screen_h,
         reserved_zones=RESERVED_ZONES,
         gesture_params=gesture_params,
-        closure_threshold_ms=(profile.get("blink") or {}).get("long_threshold_ms"),
+        closure_threshold_ms=blink.get("long_threshold_ms"),
+        ear_threshold=blink.get("ear_close"),
+        ear_reopen=blink.get("ear_reopen"),
     )
 
     recalibrator = OnlineRecalibrator(model)
@@ -116,6 +147,32 @@ def build_emitter(profile, dispatcher, rate, capture_backend, input_backend):
     )
     return emitter, model, machine
 
+# Fraction of each screen dimension a prediction may fall outside the panel and still be
+# treated as a look at the edge. Beyond it the model is extrapolating past the region it was
+# fitted over and the position is not evidence of anything.
+OFF_SCREEN_MARGIN = 0.15
+
+
+def within_screen(x, y, screen_w, screen_h):
+    """Whether a predicted position is close enough to the panel to be usable."""
+    mx, my = OFF_SCREEN_MARGIN * screen_w, OFF_SCREEN_MARGIN * screen_h
+    return -mx <= x <= screen_w + mx and -my <= y <= screen_h + my
+
+
+def _follow_gaze(input_backend, events) -> None:
+    """Places the pointer at the filtered gaze position carried by GAZE_MOVE.
+
+    The raw prediction is not used: it is the unsmoothed output of the model and moves
+    by the width of the landmark jitter every frame. GAZE_MOVE carries the position
+    after the 1 euro filter, which is also the one the overlay draws.
+    """
+    for event in events:
+        if event.event_type == EventType.GAZE_MOVE.value:
+            if event.x is not None and event.y is not None:
+                input_backend.move(event.x, event.y)
+            return
+
+
 def calibrated_position(model, sample):
     """Map a sample to screen coordinates, or None when its geometry is unusable.
     Returns (x, y, fx, fy).
@@ -138,6 +195,10 @@ def run_engine(source, publisher, loop, emitter=None, model=None, machine=None):
     last_stat_time = time.monotonic()
     frames_since_stat = 0
     recent_confs = deque(maxlen=60)
+    off_screen = 0
+    off_screen_reported = False
+    screen_w, screen_h = (machine.screen_w, machine.screen_h) if machine is not None \
+        else (1920, 1080)
     
     try:
         for sample in source.iter_samples():
@@ -147,10 +208,25 @@ def run_engine(source, publisher, loop, emitter=None, model=None, machine=None):
                 position = calibrated_position(model, sample)
                 if position is None:
                     emitter.process_sample(sample, None, None)
+                elif not within_screen(position[0], position[1], screen_w, screen_h):
+                    # Reported once per run rather than per sample: at thirty samples a second
+                    # a message per rejection would bury everything else in the log.
+                    if not off_screen_reported:
+                        logger.warning(
+                            "Predicted gaze is outside the panel by more than %.0f per cent "
+                            "of it (%.0f, %.0f on %dx%d). The calibration does not cover where "
+                            "the features now sit; recalibrate in the posture you will use.",
+                            100.0 * OFF_SCREEN_MARGIN, position[0], position[1],
+                            screen_w, screen_h)
+                        off_screen_reported = True
+                    off_screen += 1
+                    emitter.process_sample(sample, None, None)
                 else:
-                    emitter.process_sample(sample, position[0], position[1])
+                    events = emitter.process_sample(sample, position[0], position[1])
                     if machine is not None:
                         machine.latest_features = (position[2], position[3])
+                        if machine.input_backend is not None:
+                            _follow_gaze(machine.input_backend, events)
 
             if machine is not None:
                 machine.check_timeout(sample.t)
@@ -198,6 +274,10 @@ def main():
     parser.add_argument("--model-path", type=str, default="face_landmarker.task", help="Path to face_landmarker.task")
     parser.add_argument("--profile", type=str, help="Calibration profile to load (defaults to the stored profile)")
     parser.add_argument("--rate", type=float, default=30.0, help="Expected sample rate in Hz, for filter tuning")
+    parser.add_argument("--no-input", action="store_true",
+                        help="Run every stage but report actions instead of injecting them. "
+                             "Use for the first live run on a machine: a mapping fault "
+                             "otherwise announces itself as a click on whatever was underneath.")
     args = parser.parse_args()
 
     if args.source == "replay":
@@ -211,7 +291,11 @@ def main():
         from engine.capture.windows import WindowsCapture
         from engine.input.windows import WindowsInput
         capture_backend = WindowsCapture()
-        input_backend = WindowsInput()
+        if args.no_input:
+            input_backend = _ReportingInput()
+            logger.warning("Dry run: actions are reported, not injected.")
+        else:
+            input_backend = WindowsInput()
         if args.record_file:
             source = RecorderSource(inner=source, filepath=args.record_file)
 
