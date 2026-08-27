@@ -471,6 +471,121 @@
         "reason"
       ],
       "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "CLICK"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "button": {
+          "type": "string",
+          "enum": [
+            "left",
+            "right",
+            "middle"
+          ]
+        },
+        "count": {
+          "type": "integer"
+        }
+      },
+      "required": [
+        "action",
+        "x",
+        "y",
+        "button",
+        "count"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "DRAG"
+        },
+        "phase": {
+          "type": "string",
+          "enum": [
+            "start",
+            "end"
+          ]
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "action",
+        "phase",
+        "x",
+        "y"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "SCROLL"
+        },
+        "x": {
+          "type": "number"
+        },
+        "y": {
+          "type": "number"
+        },
+        "dy": {
+          "type": "number"
+        }
+      },
+      "required": [
+        "action",
+        "x",
+        "y",
+        "dy"
+      ],
+      "additionalProperties": false
+    },
+    {
+      "type": "object",
+      "properties": {
+        "action": {
+          "const": "KEY"
+        },
+        "text": {
+          "type": "string"
+        },
+        "keycode": {
+          "type": "string"
+        }
+      },
+      "required": [
+        "action"
+      ],
+      "anyOf": [
+        {
+          "required": [
+            "text"
+          ]
+        },
+        {
+          "required": [
+            "keycode"
+          ]
+        }
+      ],
+      "additionalProperties": false
     }
   ],
   "definitions": {

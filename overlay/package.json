@@ -1,0 +1,20 @@
+{
+  "name": "omniscient-overlay",
+  "version": "1.0.0",
+  "type": "module",
+  "main": "src/main.js",
+  "scripts": {
+    "start": "electron ."
+  },
+  "dependencies": {
+    "ajv": "^8.20.0",
+    "ws": "^8.18.0"
+  },
+  "devDependencies": {
+    "electron": "^31.3.1"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "description": ""
+}

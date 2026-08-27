@@ -1,0 +1,31 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <meta charset="UTF-8">
+    <title>Omniscient Overlay</title>
+    <style>
+        body {
+            margin: 0;
+            padding: 0;
+            overflow: hidden;
+            background-color: transparent; /* must be transparent */
+        }
+        #cursor {
+            position: absolute;
+            width: 20px;
+            height: 20px;
+            background-color: rgba(255, 0, 0, 0.7);
+            border-radius: 50%;
+            pointer-events: none; /* cursor itself should not capture clicks */
+            transform: translate(-50%, -50%); /* center on coordinate */
+            display: none;
+            transition: left 0.05s linear, top 0.05s linear;
+        }
+    </style>
+</head>
+<body>
+    <div id="cursor"></div>
+    <!-- Load renderer -->
+    <script type="module" src="renderer.js"></script>
+</body>
+</html>
