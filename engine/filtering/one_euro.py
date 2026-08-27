@@ -2,7 +2,7 @@ import math
 from typing import Tuple, Optional
 
 class OneEuroFilter:
-    def __init__(self, rate: float, min_cutoff: float = 1.0, beta: float = 0.007, d_cutoff: float = 1.0) -> None:
+    def __init__(self, rate: float, min_cutoff: float = 0.1, beta: float = 0.002, d_cutoff: float = 1.0) -> None:
         self.rate = rate
         # UNTUNED: These are literature starting points from Casiez et al. 2012, not tuned against recorded human gaze data.
         self.min_cutoff = min_cutoff

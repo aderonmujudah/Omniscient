@@ -18,7 +18,7 @@ function createWindow() {
     win.maximize();
     
     // Windows API mechanism for click-through
-    win.setIgnoreMouseEvents(true, { forward: true });
+    win.setIgnoreMouseEvents(true);
 
     // Hide from screen capture APIs (WDA_EXCLUDEFROMCAPTURE)
     // Electron setContentProtection does this on Windows 10+
