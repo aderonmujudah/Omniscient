@@ -3,3 +3,7 @@ __pycache__/
 .pytest_cache/
 engine/sources/face_landmarker.task
 overlay/node_modules
+# Raw capture data from human measurement sessions. Multi-megabyte per session and
+# reproducible only by recording another person; the measurements drawn from it are
+# written up instead.
+recordings/

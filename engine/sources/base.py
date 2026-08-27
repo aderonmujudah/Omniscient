@@ -1,6 +1,10 @@
 from typing import Protocol, Iterator, Optional, Dict
 from dataclasses import dataclass
 
+# Key under which a recording stores what the driver had on screen when a sample was
+# captured. Deliberately not a GazeSample field: it describes the display, not the sensor.
+LABEL_KEY = "label"
+
 @dataclass
 class Point2D:
     x: float

@@ -6,6 +6,7 @@ import numpy as np
 import os
 import urllib.request
 import mediapipe as mp
+from typing import Optional
 from mediapipe.tasks import python
 from mediapipe.tasks.python import vision
 from .base import GazeSource, GazeSample, EyeGeometry, Point2D
@@ -15,10 +16,12 @@ from engine.features.depth import compute_ipd_px
 logger = logging.getLogger(__name__)
 
 class WebcamSource(GazeSource):
-    def __init__(self, camera_index: int = 0):
+    def __init__(self, camera_index: int = 0, model_path: Optional[str] = None):
         self.camera_index = camera_index
-        # Resolve model path relative to this module file
-        self.model_path = os.path.join(os.path.dirname(__file__), "face_landmarker.task")
+        # Default resolves relative to this module file, so the model is found regardless of
+        # the working directory the engine is launched from.
+        self.model_path = model_path or os.path.join(os.path.dirname(__file__),
+                                                     "face_landmarker.task")
         self.cap = None
         self.detector = None
         self.seq = 0

@@ -14,10 +14,53 @@ SETTLE_TIME_S = 0.3
 COLLECT_TIME_S = 0.68
 MAX_RETRIES = 3
 
+# Below this count the dispersion of a window is not meaningful, so the window is unstable
+# regardless of what it measures.
+MIN_WINDOW_SAMPLES = 10
+
+
+def compute_dispersion(features: list[tuple[float, float]]) -> float:
+    """Diagonal of the bounding box enclosing a feature window."""
+    if not features:
+        return float('inf')
+    min_x = min(f[0] for f in features)
+    max_x = max(f[0] for f in features)
+    min_y = min(f[1] for f in features)
+    max_y = max(f[1] for f in features)
+    return math.hypot(max_x - min_x, max_y - min_y)
+
+
+def window_accepted(features: list[tuple[float, float]], threshold: Optional[float] = None) -> bool:
+    """
+    The acceptance rule for one collection window.
+
+    Offline analysis re-applies this rule to recorded windows at candidate thresholds, so it
+    is defined once here rather than restated by each caller. A second copy would let the
+    tuned value and the live value diverge without any test noticing.
+    """
+    if threshold is None:
+        threshold = DISPERSION_THRESHOLD
+    return len(features) > MIN_WINDOW_SAMPLES and compute_dispersion(features) <= threshold
+
+
+def sample_feature(sample: GazeSample) -> Optional[tuple[float, float]]:
+    """The feature a sample contributes to a collection window, or None if it contributes none."""
+    if sample.ok and sample.eyes:
+        return extract_features(sample.eyes["left"], sample.eyes["right"])
+    return None
+
+
 class CalibrationSession:
-    def __init__(self, screen_w: int, screen_h: int):
+    def __init__(self, screen_w: int, screen_h: int,
+                 dispersion_threshold: Optional[float] = None):
         self.screen_w = screen_w
         self.screen_h = screen_h
+
+        # Resolved to a concrete number rather than kept as None, because the value is recorded
+        # with every sample and a recording that stated "the default" would not say what the
+        # default was when it was made.
+        self.dispersion_threshold = (DISPERSION_THRESHOLD if dispersion_threshold is None
+                                     else dispersion_threshold)
         
         # 9 point grid
         margin_x = screen_w * 0.1
@@ -81,13 +124,7 @@ class CalibrationSession:
         return None
         
     def _compute_dispersion(self, features: list[tuple[float, float]]) -> float:
-        if not features:
-            return float('inf')
-        min_x = min(f[0] for f in features)
-        max_x = max(f[0] for f in features)
-        min_y = min(f[1] for f in features)
-        max_y = max(f[1] for f in features)
-        return math.hypot(max_x - min_x, max_y - min_y)
+        return compute_dispersion(features)
 
     def process_sample(self, sample: GazeSample) -> Optional[dict]:
         now = sample.t
@@ -124,7 +161,7 @@ class CalibrationSession:
                 features = [(f_x, f_y) for f_x, f_y, _ in self.window_samples]
                 dispersion = self._compute_dispersion(features)
                 
-                if dispersion <= DISPERSION_THRESHOLD and len(features) > 10:
+                if window_accepted(features, self.dispersion_threshold):
                     # Accept
                     avg_fx = sum(f[0] for f in features) / len(features)
                     avg_fy = sum(f[1] for f in features) / len(features)
@@ -153,9 +190,9 @@ class CalibrationSession:
                         
                 return self._get_event()
                 
-            if sample.ok and sample.eyes:
-                fx, fy = extract_features(sample.eyes["left"], sample.eyes["right"])
-                self.window_samples.append((fx, fy, sample.ipd_px))
+            feature = sample_feature(sample)
+            if feature is not None:
+                self.window_samples.append((feature[0], feature[1], sample.ipd_px))
 
         return None
         
