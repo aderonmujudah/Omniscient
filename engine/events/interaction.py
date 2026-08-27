@@ -43,6 +43,10 @@ class InteractionEvent:
     point_index: Optional[int] = None
     profile_id: Optional[str] = None
     reason: Optional[str] = None
+    cells: Optional[list] = None
+    image_b64: Optional[str] = None
+    grid_dim: Optional[list] = None
+    zoom_rect: Optional[dict] = None
 
     def to_dict(self) -> Dict[str, Any]:
         """Serialize to dict, excluding None fields."""
@@ -52,7 +56,8 @@ class InteractionEvent:
         }
         for field_name in ("x", "y", "duration_ms", "start_x", "start_y", "end_x", "end_y",
                           "zone_id", "progress", "role", "from_state", "to_state",
-                          "point_index", "profile_id", "reason"):
+                          "point_index", "profile_id", "reason", "cells", "image_b64",
+                          "grid_dim", "zoom_rect"):
             value = getattr(self, field_name)
             if value is not None:
                 result[field_name] = value

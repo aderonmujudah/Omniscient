@@ -9,6 +9,8 @@
             padding: 0;
             overflow: hidden;
             background-color: transparent; /* must be transparent */
+            color: white;
+            font-family: sans-serif;
         }
         #cursor {
             position: absolute;
@@ -16,15 +18,86 @@
             height: 20px;
             background-color: rgba(255, 0, 0, 0.7);
             border-radius: 50%;
-            pointer-events: none; /* cursor itself should not capture clicks */
-            transform: translate(-50%, -50%); /* center on coordinate */
+            pointer-events: none;
+            transform: translate(-50%, -50%);
             display: none;
             transition: left 0.05s linear, top 0.05s linear;
+            z-index: 10000;
+        }
+        #dwell-progress {
+            position: absolute;
+            width: 40px;
+            height: 40px;
+            border-radius: 50%;
+            border: 4px solid rgba(255,255,255,0.3);
+            pointer-events: none;
+            transform: translate(-50%, -50%);
+            display: none;
+            z-index: 10001;
+            transition: left 0.05s linear, top 0.05s linear;
+        }
+        .dwell-fill {
+            position: absolute;
+            top: 0; left: 0; right: 0; bottom: 0;
+            border-radius: 50%;
+            border: 4px solid #00ff00;
+            clip-path: polygon(50% 50%, 50% 0%, 50% 0%, 50% 0%, 50% 0%, 50% 0%, 50% 0%);
+            /* We will update the clip-path via JS to simulate a pie timer */
+        }
+        #targeting-layer {
+            position: absolute;
+            top: 0; left: 0; width: 100vw; height: 100vh;
+            display: none;
+            z-index: 1000;
+        }
+        #frozen-bg {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-size: cover;
+            background-position: center;
+        }
+        /* A dark overlay to dim the screen so the grid pops */
+        #frozen-bg::after {
+            content: "";
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+            background-color: rgba(0, 0, 0, 0.4);
+        }
+        #grid-container {
+            position: absolute;
+            top: 0; left: 0; width: 100%; height: 100%;
+        }
+        .grid-cell {
+            position: absolute;
+            border: 2px solid rgba(255, 255, 255, 0.7);
+            box-sizing: border-box;
+            background-color: rgba(255, 255, 255, 0.1);
+        }
+        .grid-cell.active {
+            background-color: rgba(255, 255, 0, 0.3);
+            border-color: yellow;
+        }
+        #resolved-marker {
+            position: absolute;
+            width: 10px; height: 10px;
+            background-color: cyan;
+            border-radius: 50%;
+            transform: translate(-50%, -50%);
+            display: none;
+            z-index: 2000;
         }
     </style>
 </head>
 <body>
+    <div id="targeting-layer">
+        <div id="frozen-bg"></div>
+        <div id="grid-container"></div>
+        <div id="resolved-marker"></div>
+    </div>
     <div id="cursor"></div>
+    <div id="dwell-progress">
+        <div class="dwell-fill"></div>
+    </div>
     <!-- Load renderer -->
     <script type="module" src="renderer.js"></script>
 </body>

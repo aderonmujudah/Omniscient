@@ -32,16 +32,20 @@ RESERVED_ZONES = {
 }
 
 
-def build_emitter(profile, dispatcher, rate):
+from engine.machine import StateMachine
+from engine.capture.windows import WindowsCapture
+from engine.capture.null import NullCapture
+
+def build_emitter(profile, dispatcher, rate, capture_backend, input_backend):
     """Compose the signal and event layers from a calibration profile.
 
-    Returns the emitter and the calibration model, or (None, None) when the profile carries
+    Returns the emitter, the calibration model, and the state machine, or (None, None, None) when the profile carries
     no mapping. Without a mapping there is no screen position, so no gesture that depends on
     one can run and no cursor can be drawn.
     """
     model_data = profile.get("model") or {}
     if not model_data.get("coeffs_x"):
-        return None, None
+        return None, None, None
 
     model = CalibrationModel()
     model.load_dict(model_data)
@@ -49,6 +53,16 @@ def build_emitter(profile, dispatcher, rate):
     screen = profile.get("screen") or {}
     screen_w = int(screen.get("w", 1920))
     screen_h = int(screen.get("h", 1080))
+    screen_diag_mm = float(screen.get("diag_mm", 597))
+
+    validation = profile.get("validation") or {}
+    acc_deg = validation.get("mean_error_deg", 2.0)
+    if acc_deg <= 0.0:
+        acc_deg = 2.0
+    
+    # We estimate viewing distance assuming IPD of 63.5mm if not set
+    # Or just use 600mm default
+    viewing_dist_mm = 600.0
 
     gestures = profile.get("gestures") or {}
     roles = gestures.get("roles") or {}
@@ -67,18 +81,38 @@ def build_emitter(profile, dispatcher, rate):
         closure_threshold_ms=(profile.get("blink") or {}).get("long_threshold_ms"),
     )
 
+    from engine.calibration.online import OnlineRecalibrator
+    recalibrator = OnlineRecalibrator(model)
+
+    machine = StateMachine(
+        screen_w=screen_w,
+        screen_h=screen_h,
+        screen_diag_mm=screen_diag_mm,
+        acc_deg=acc_deg,
+        viewing_dist_mm=viewing_dist_mm,
+        dispatcher=dispatcher,
+        capture_backend=capture_backend,
+        input_backend=input_backend,
+        recalibrator=recalibrator
+    )
+
+    # Subscribe the state machine to events
+    dispatcher.subscribe(machine.process_event)
+
     emitter = InteractionEmitter(
         gaze_filter=OneEuroFilter(rate=rate),
         classifier=SampleClassifier(fixation_detector=FixationDetector()),
         registry=registry,
         dispatcher=dispatcher,
         dwell=DwellTimer(),
+        zone_resolver=machine.resolve_zone
     )
-    return emitter, model
-
+    return emitter, model, machine
 
 def calibrated_position(model, sample):
-    """Map a sample to screen coordinates, or None when its geometry is unusable."""
+    """Map a sample to screen coordinates, or None when its geometry is unusable.
+    Returns (x, y, fx, fy).
+    """
     if model is None or not sample.ok or not sample.eyes:
         return None
     left = sample.eyes.get("left")
@@ -86,10 +120,11 @@ def calibrated_position(model, sample):
     if left is None or right is None:
         return None
     fx, fy = extract_features(left, right)
-    return model.predict(fx, fy)
+    x, y = model.predict(fx, fy)
+    return x, y, fx, fy
 
 
-def run_engine(source, publisher, loop, emitter=None, model=None):
+def run_engine(source, publisher, loop, emitter=None, model=None, machine=None):
     source.start()
     logger.info("Engine started.")
     
@@ -107,6 +142,11 @@ def run_engine(source, publisher, loop, emitter=None, model=None):
                     emitter.process_sample(sample, None, None)
                 else:
                     emitter.process_sample(sample, position[0], position[1])
+                    if machine is not None:
+                        machine.latest_features = (position[2], position[3])
+
+            if machine is not None:
+                machine.check_timeout(sample.t)
 
             frames_since_stat += 1
             if sample.conf is not None:
@@ -133,6 +173,8 @@ def run_engine(source, publisher, loop, emitter=None, model=None):
         logger.info("Interrupted by user.")
     finally:
         source.stop()
+        if machine is not None:
+            machine.capture.close()
         asyncio.run_coroutine_threadsafe(publisher.stop(), loop)
 
 def main():
@@ -152,8 +194,14 @@ def main():
         if not args.replay_file:
             parser.error("--replay-file is required when source is replay")
         source = ReplaySource(filepath=args.replay_file)
+        capture_backend = NullCapture()
+        from engine.input.null import NullInput
+        input_backend = NullInput()
     else:
         source = WebcamSource(camera_index=args.camera_index, model_path=args.model_path)
+        capture_backend = WindowsCapture()
+        from engine.input.windows import WindowsInput
+        input_backend = WindowsInput()
         if args.record_file:
             source = RecorderSource(inner=source, filepath=args.record_file)
 
@@ -175,14 +223,14 @@ def main():
     dispatcher.set_ws_broadcast(publisher.publish_event)
 
     profile = load_profile(args.profile) if args.profile else load_profile()
-    emitter, model = build_emitter(profile, dispatcher, args.rate)
+    emitter, model, machine = build_emitter(profile, dispatcher, args.rate, capture_backend, input_backend)
     if emitter is None:
         logger.warning(
             "No calibration mapping found. Publishing raw samples only; no interaction "
             "events will be emitted until a profile is calibrated."
         )
 
-    run_engine(source, publisher, loop, emitter=emitter, model=model)
+    run_engine(source, publisher, loop, emitter=emitter, model=model, machine=machine)
     
     # Cleanup
     loop.call_soon_threadsafe(loop.stop)
