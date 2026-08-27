@@ -139,7 +139,10 @@ def build_emitter(profile, dispatcher, rate, capture_backend, input_backend):
 
     emitter = InteractionEmitter(
         gaze_filter=OneEuroFilter(rate=rate),
-        classifier=SampleClassifier(fixation_detector=FixationDetector()),
+        classifier=SampleClassifier(
+            fixation_detector=FixationDetector(),
+            ear_threshold=blink.get("ear_close")
+        ),
         registry=registry,
         dispatcher=dispatcher,
         dwell=DwellTimer(),

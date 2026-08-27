@@ -77,9 +77,6 @@ class InteractionEmitter:
             ))
 
         fx, fy = self._filter(gaze_x, gaze_y, sample.t)
-        events.append(InteractionEvent(
-            event_type=EventType.GAZE_MOVE.value, timestamp=sample.t, x=fx, y=fy,
-        ))
 
         ear = sample.ear or {}
         state, completed = self._classifier.classify(
@@ -90,6 +87,11 @@ class InteractionEmitter:
             gaze_y=fy,
             timestamp=sample.t,
         )
+
+        if state is not SampleState.BLINK:
+            events.append(InteractionEvent(
+                event_type=EventType.GAZE_MOVE.value, timestamp=sample.t, x=fx, y=fy,
+            ))
 
         events.extend(self._fixation_events(state, completed, sample.t))
 
