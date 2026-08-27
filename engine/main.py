@@ -18,6 +18,10 @@ from engine.features.eye_features import extract_features
 from engine.filtering.classifier import SampleClassifier
 from engine.filtering.fixation import FixationDetector
 from engine.filtering.one_euro import OneEuroFilter
+from engine.calibration.online import OnlineRecalibrator
+from engine.capture.null import NullCapture
+from engine.input.null import NullInput
+from engine.machine import StateMachine
 
 logging.basicConfig(level=logging.INFO, format="%(asctime)s [%(levelname)s] %(message)s")
 logger = logging.getLogger(__name__)
@@ -25,16 +29,16 @@ logger = logging.getLogger(__name__)
 # Reserved zones are a property of the screen rather than of the user, so they are defined
 # here rather than persisted per profile. Fractions of the screen, not pixels, so a profile
 # calibrated on one display resolves correctly on another.
+# Viewing distance is a measured per-user quantity. Until it is measured it is defaulted here,
+# under a name that does not claim otherwise, because every on-screen geometry is sized off it.
+DEFAULT_VIEWING_DIST_MM = 600.0
+
 RESERVED_ZONES = {
     "engage": {"x": 0.0, "y": 0.92, "w": 0.08, "h": 0.08},
     "cancel": {"x": 0.92, "y": 0.0, "w": 0.08, "h": 0.08},
     "menu": {"x": 0.0, "y": 0.0, "w": 0.08, "h": 0.08},
 }
 
-
-from engine.machine import StateMachine
-from engine.capture.windows import WindowsCapture
-from engine.capture.null import NullCapture
 
 def build_emitter(profile, dispatcher, rate, capture_backend, input_backend):
     """Compose the signal and event layers from a calibration profile.
@@ -59,10 +63,14 @@ def build_emitter(profile, dispatcher, rate, capture_backend, input_backend):
     acc_deg = validation.get("mean_error_deg", 2.0)
     if acc_deg <= 0.0:
         acc_deg = 2.0
-    
-    # We estimate viewing distance assuming IPD of 63.5mm if not set
-    # Or just use 600mm default
-    viewing_dist_mm = 600.0
+
+    viewing_dist_mm = float(screen.get("viewing_dist_mm") or 0.0)
+    if viewing_dist_mm <= 0.0:
+        viewing_dist_mm = DEFAULT_VIEWING_DIST_MM
+        logger.warning(
+            "Profile carries no viewing distance; falling back to %.0f mm. The grid dimension and "
+            "the radial deadzone are both derived from it, so they are provisional until measured.",
+            DEFAULT_VIEWING_DIST_MM)
 
     gestures = profile.get("gestures") or {}
     roles = gestures.get("roles") or {}
@@ -81,7 +89,6 @@ def build_emitter(profile, dispatcher, rate, capture_backend, input_backend):
         closure_threshold_ms=(profile.get("blink") or {}).get("long_threshold_ms"),
     )
 
-    from engine.calibration.online import OnlineRecalibrator
     recalibrator = OnlineRecalibrator(model)
 
     machine = StateMachine(
@@ -93,10 +100,10 @@ def build_emitter(profile, dispatcher, rate, capture_backend, input_backend):
         dispatcher=dispatcher,
         capture_backend=capture_backend,
         input_backend=input_backend,
-        recalibrator=recalibrator
+        recalibrator=recalibrator,
+        reserved_zones=RESERVED_ZONES
     )
 
-    # Subscribe the state machine to events
     dispatcher.subscribe(machine.process_event)
 
     emitter = InteractionEmitter(
@@ -147,6 +154,9 @@ def run_engine(source, publisher, loop, emitter=None, model=None, machine=None):
 
             if machine is not None:
                 machine.check_timeout(sample.t)
+                if machine.shutdown_requested:
+                    logger.info("Shutdown requested from the system menu.")
+                    break
 
             frames_since_stat += 1
             if sample.conf is not None:
@@ -195,12 +205,12 @@ def main():
             parser.error("--replay-file is required when source is replay")
         source = ReplaySource(filepath=args.replay_file)
         capture_backend = NullCapture()
-        from engine.input.null import NullInput
         input_backend = NullInput()
     else:
         source = WebcamSource(camera_index=args.camera_index, model_path=args.model_path)
-        capture_backend = WindowsCapture()
+        from engine.capture.windows import WindowsCapture
         from engine.input.windows import WindowsInput
+        capture_backend = WindowsCapture()
         input_backend = WindowsInput()
         if args.record_file:
             source = RecorderSource(inner=source, filepath=args.record_file)

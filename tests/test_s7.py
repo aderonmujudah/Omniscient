@@ -67,21 +67,52 @@ def test_scroll_zones():
     from engine.scroll import ScrollController
     input_backend = NullInput()
     sc = ScrollController(1080, input_backend)
-    
-    # Move to top zone (y < 86.4)
+
     sc.update(960.0, 50.0, 1.0, False)
     assert sc.active_zone == "top"
-    
-    # Before 400ms passes
+
     sc.update(960.0, 50.0, 1.2, False)
-    assert len(input_backend.mouse_injections) == 0 # no scroll yet
-    
-    # After 400ms passes
+    assert len(input_backend.mouse_injections) == 0, "scrolled before the arm time elapsed"
+
+    # The arm time is reached here, which starts the ramp rather than emitting on the same tick.
     sc.update(960.0, 50.0, 1.5, False)
-    # the first scroll might be evaluated at the next tick, wait
-    assert len(input_backend.mouse_injections) == 0 # initial timestamp set
-    
-    # Next tick
+    assert len(input_backend.mouse_injections) == 0
+
     sc.update(960.0, 50.0, 1.6, False)
-    assert len(input_backend.mouse_injections) > 0 # Scrolled!
+    assert len(input_backend.mouse_injections) > 0
+
+
+def test_reserved_zones_do_not_scroll():
+    """The corners hold ENGAGE, CANCEL and MENU, and the scroll bands span the full screen width.
+
+    MENU is the recovery hatch for a user whose calibration has failed. Without this exclusion,
+    dwelling on it scrolls the content underneath at the maximum rate, because the top band's ramp
+    peaks at the very edge where that corner sits.
+    """
+    from engine.main import RESERVED_ZONES
+    from engine.scroll import ScrollController
+
+    screen_w, screen_h = 1920, 1080
+
+    for name, zone in RESERVED_ZONES.items():
+        input_backend = NullInput()
+        sc = ScrollController(screen_h, input_backend,
+                              screen_w=screen_w, reserved_zones=RESERVED_ZONES)
+        # The centre of the reserved zone, which is where a dwell on it lands.
+        x = (zone["x"] + zone["w"] / 2) * screen_w
+        y = (zone["y"] + zone["h"] / 2) * screen_h
+
+        for step in range(20):
+            sc.update(x, y, 1.0 + step * 0.1, False)
+
+        assert sc.active_zone is None, f"{name} zone armed the scroll ramp"
+        assert input_backend.mouse_injections == [], f"dwelling on the {name} zone scrolled"
+
+    # A point on the same band but clear of every reserved zone still scrolls.
+    input_backend = NullInput()
+    sc = ScrollController(screen_h, input_backend,
+                          screen_w=screen_w, reserved_zones=RESERVED_ZONES)
+    for step in range(20):
+        sc.update(screen_w / 2, 40.0, 1.0 + step * 0.1, False)
+    assert input_backend.mouse_injections, "the exclusion suppressed scrolling everywhere"
     

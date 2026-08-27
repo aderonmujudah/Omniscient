@@ -67,30 +67,13 @@ export class TargetStage {
                 const scaleY = window.innerHeight / rh;
                 this.bg.style.backgroundSize = `${scaleX * 100}% ${scaleY * 100}%`;
                 this.bg.style.backgroundPosition = `${-rx * scaleX}px ${-ry * scaleY}px`;
-                
-                // Overlay also draws a grid to show it's still targeted
-                // The grid cells should now be the sub-cells of the zoomRect, wait no, 
-                // in zoom 1, the user dwells anywhere to trigger zoom2. The engine handles the math, 
-                // we just display the grid lines for visual reference if needed.
-                // The prompt says "render the magnified view". We did that via CSS background scaling.
-                
-                // Let's draw grid lines over the zoom view based on the grid dims so user knows where sub-cells are
-                if (event.grid_dim) {
-                    const [cols, rows] = event.grid_dim;
-                    const cw = window.innerWidth / cols;
-                    const ch = window.innerHeight / rows;
-                    for (let r=0; r<rows; r++) {
-                        for (let c=0; c<cols; c++) {
-                            const cell = document.createElement('div');
-                            cell.className = 'grid-cell';
-                            cell.style.left = (c * cw) + 'px';
-                            cell.style.top = (r * ch) + 'px';
-                            cell.style.width = cw + 'px';
-                            cell.style.height = ch + 'px';
-                            this.grid.appendChild(cell);
-                        }
-                    }
-                }
+
+                // No cell lattice is drawn over the magnified view. Selection here is continuous:
+                // the engine centres the next window on wherever the gaze rests, so drawn cell
+                // boundaries would advertise discrete targets that do not exist. They would also be
+                // a second implementation of the cell arithmetic, computed from the window's CSS
+                // width rather than from the screen rectangles the engine resolves against, and the
+                // two disagree wherever the display is scaled.
             }
         } else if (this.state === "RADIAL") {
             this.grid.innerHTML = "";

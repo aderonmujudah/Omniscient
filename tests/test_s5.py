@@ -40,26 +40,24 @@ def test_grid_boundaries():
     assert cells[0][6].w == 274
 
 def test_zoom_mapping():
-    # We want to test that a pixel chosen in ZOOM1 maps back to the exact sub-coordinate in the cell.
-    # The cell is rect(x, y, w, h). The whole screen (1920x1080) maps to this rect.
-    screen_w, screen_h = 1920, 1080
-    rect = Rect(100, 200, 300, 400) # an arbitrary cell
-    
-    # If the user dwells at screen pixel (0, 0), it should map to (100, 200)
-    def map_back(px, py, r):
-        orig_x = r.x + (px / screen_w) * r.w
-        orig_y = r.y + (py / screen_h) * r.h
-        return orig_x, orig_y
-        
-    assert map_back(0, 0, rect) == (100.0, 200.0)
-    
-    # If user dwells at bottom-right of screen, it maps to bottom-right of cell
-    assert map_back(screen_w, screen_h, rect) == (400.0, 600.0)
-    
-    # Same logic applies to ZOOM2
-    zoom2_rect = Rect(150, 250, 50, 50) # arbitrary ZOOM2 rect
-    assert map_back(0, 0, zoom2_rect) == (150.0, 250.0)
-    assert map_back(screen_w, screen_h, zoom2_rect) == (200.0, 300.0)
+    """A dwell inside the magnified view resolves to the coordinate it magnified.
+
+    The mapping under test is the machine's own, not a copy of it declared here: a test that
+    reimplements the arithmetic proves only that the copy agrees with itself and would still pass
+    with the production method deleted.
+    """
+    machine = _headless_machine(screen_w=1920, screen_h=1080)
+    rect = Rect(100, 200, 300, 400)
+
+    assert machine._map_to_orig(0, 0, rect) == (100.0, 200.0)
+    assert machine._map_to_orig(1920, 1080, rect) == (400.0, 600.0)
+
+    # The centre of the screen is the centre of the rectangle it magnifies.
+    assert machine._map_to_orig(960, 540, rect) == (250.0, 400.0)
+
+    zoom2_rect = Rect(150, 250, 50, 50)
+    assert machine._map_to_orig(0, 0, zoom2_rect) == (150.0, 250.0)
+    assert machine._map_to_orig(1920, 1080, zoom2_rect) == (200.0, 300.0)
 
 
 from engine.machine import StateMachine, derive_grid
@@ -72,6 +70,12 @@ class MockDispatcher:
         self.events = []
     def dispatch(self, ev):
         self.events.append(ev)
+
+
+def _headless_machine(screen_w=1920, screen_h=1080, acc_deg=2.0, viewing_dist_mm=600.0):
+    """A machine wired to the null backends, at a 24 inch 1920x1080 screen's diagonal."""
+    return StateMachine(screen_w, screen_h, 597.0, acc_deg, viewing_dist_mm,
+                        MockDispatcher(), NullCapture(screen_w, screen_h))
 
 def test_full_sequence_headless():
     dispatcher = MockDispatcher()
@@ -161,10 +165,27 @@ def test_timeout_to_idle():
     assert machine.state == "IDLE"
 
 def test_idle_inert_against_recording():
+    """Ordinary gaze movement in IDLE causes no state transition.
+
+    NOT CLOSED. Closing this mark requires a recording of a person reading and blinking naturally
+    for several minutes, which does not exist yet. What runs below is synthetic: it sweeps a gaze
+    path across the screen, which demonstrates that no unqualified dwell target exists in IDLE but
+    cannot stand in for real ocular behaviour.
     """
-    IDLE is confirmed inert against a real recording, or the mark is explicitly recorded as not closed.
-    Currently using synthetic data.
-    NOT CLOSED: Requires a real recording of a person reading and blinking naturally for several minutes.
-    """
-    pass
+    machine = _headless_machine()
+    dispatcher = machine.dispatcher
+
+    for step in range(600):
+        t = step * 0.033
+        machine.process_event(InteractionEvent(
+            event_type=EventType.GAZE_MOVE.value,
+            timestamp=t,
+            x=float(step % 1920),
+            y=float((step * 7) % 1080),
+        ))
+        machine.check_timeout(t)
+
+    assert machine.state == "IDLE"
+    transitions = [e for e in dispatcher.events if e.event_type == EventType.STATE_CHANGE.value]
+    assert transitions == [], f"IDLE produced {len(transitions)} transitions under gaze movement alone"
 

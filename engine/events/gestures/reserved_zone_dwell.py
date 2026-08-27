@@ -67,9 +67,10 @@ class ReservedZoneDwellDetector:
             self._zone_entry_t = sample.t if active_zone is not None else None
 
         if self._current_zone is not None and self._zone_entry_t is not None:
-            # Menu role requires a 2s dwell per spec, others use default
-            duration_needed = 2.0 if self._current_zone == Role.MENU else self._dwell_duration_s
-            if sample.t - self._zone_entry_t >= duration_needed:
+            # Every role holds for the same duration, MENU included. MENU is the recovery hatch,
+            # reached by a user whose calibration has already failed and who may not be able to
+            # hold a long fixation, so it must not be the hardest control in the system to operate.
+            if sample.t - self._zone_entry_t >= self._dwell_duration_s:
                 self._latched_x = self._last_gaze_x
                 self._latched_y = self._last_gaze_y
                 self._last_fired_role = self._current_zone

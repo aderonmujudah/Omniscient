@@ -1,6 +1,13 @@
 from typing import Optional, List
 from engine.events.interaction import InteractionEvent, EventType
 
+# Per-zone dwell durations, in seconds. Provisional: none of these has been measured against a
+# user, and the spec fixes no value for any of them. They are named here rather than written inline
+# so that the tuning pass has one place to change and the numbers are visible as assumptions.
+RADIAL_DWELL_S = 0.4
+SYSTEM_MENU_DWELL_S = 1.5
+
+
 class DwellTimer:
     def __init__(self, dwell_duration_s: float = 0.8, progress_interval_s: float = 0.05) -> None:
         self._dwell_duration_s = dwell_duration_s
@@ -46,9 +53,9 @@ class DwellTimer:
             elapsed = timestamp - self._dwell_start_t
             
             if zone_id.startswith("radial_"):
-                current_duration = 0.4
+                current_duration = RADIAL_DWELL_S
             elif zone_id.startswith("sys_"):
-                current_duration = 1.5
+                current_duration = SYSTEM_MENU_DWELL_S
             else:
                 current_duration = self._dwell_duration_s
             progress = min(elapsed / current_duration, 1.0)

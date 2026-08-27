@@ -35,6 +35,8 @@ from engine.calibration.assessment import GestureAssessment, CANDIDATE_GESTURES
 from engine.events.emitter import InteractionEmitter
 from engine.features.eye_features import extract_features
 from engine.main import RESERVED_ZONES, build_emitter, calibrated_position
+from engine.capture.null import NullCapture
+from engine.input.null import NullInput
 
 
 # ---------------------------------------------------------------------------
@@ -1149,7 +1151,8 @@ class TestEngineEmitsEvents:
         dispatcher.set_ws_broadcast(published.append)
 
         roles = GestureAssessment(gaze_position_available=True).assign_roles()
-        emitter, model = build_emitter(_fitted_profile(roles), dispatcher, rate=30.0)
+        emitter, model, _ = build_emitter(_fitted_profile(roles), dispatcher, rate=30.0,
+                                  capture_backend=NullCapture(), input_backend=NullInput())
         assert emitter is not None, "a profile with a fitted mapping must produce an emitter"
 
         for step in range(40):
@@ -1164,8 +1167,10 @@ class TestEngineEmitsEvents:
 
     def test_no_mapping_yields_no_emitter_rather_than_a_silent_one(self):
         """A profile without a mapping has no screen position, and the engine must say so."""
-        emitter, model = build_emitter({"screen": {"w": 1920, "h": 1080}},
-                                       EventDispatcher(), rate=30.0)
+        emitter, model, _ = build_emitter({"screen": {"w": 1920, "h": 1080}},
+                                          EventDispatcher(), rate=30.0,
+                                          capture_backend=NullCapture(),
+                                          input_backend=NullInput())
         assert emitter is None
         assert model is None
 
@@ -1175,7 +1180,8 @@ class TestEngineEmitsEvents:
         dispatcher.set_ws_broadcast(published.append)
 
         roles = GestureAssessment(gaze_position_available=True).assign_roles()
-        emitter, model = build_emitter(_fitted_profile(roles), dispatcher, rate=30.0)
+        emitter, model, _ = build_emitter(_fitted_profile(roles), dispatcher, rate=30.0,
+                                  capture_backend=NullCapture(), input_backend=NullInput())
 
         for step in range(10):
             sample = _sample_with_eyes(step * 0.033, 0.0, seq=step)

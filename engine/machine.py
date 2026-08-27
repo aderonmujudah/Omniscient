@@ -9,6 +9,7 @@ from typing import Tuple, Optional, Dict, Any, List
 from dataclasses import dataclass
 from engine.capture.base import ScreenCapture
 from engine.events.interaction import InteractionEvent, EventType
+from engine.scroll import ScrollController
 
 logger = logging.getLogger(__name__)
 
@@ -19,11 +20,30 @@ class Rect:
     w: int
     h: int
 
+def uncertainty_radius_px(
+    acc_deg: float,
+    viewing_dist_mm: float,
+    screen_w_px: int,
+    screen_h_px: int,
+    screen_diag_mm: float,
+) -> Optional[float]:
+    """Radius on the screen surface within which a gaze estimate may land, in pixels.
+
+    Every geometry the interface offers is sized off this one number, so it is derived here once
+    and shared rather than recomputed at each use.
+    """
+    if screen_diag_mm <= 0:
+        return None
+    px_per_mm = math.hypot(screen_w_px, screen_h_px) / screen_diag_mm
+    radius_px = viewing_dist_mm * math.tan(math.radians(acc_deg)) * px_per_mm
+    return radius_px if radius_px > 0 else None
+
+
 def derive_grid(
-    acc_deg: float, 
-    viewing_dist_mm: float, 
-    screen_w_px: int, 
-    screen_h_px: int, 
+    acc_deg: float,
+    viewing_dist_mm: float,
+    screen_w_px: int,
+    screen_h_px: int,
     screen_diag_mm: float,
     cell_size_radii: float = 1.0
 ) -> Optional[Tuple[int, int]]:
@@ -41,20 +61,15 @@ def derive_grid(
     
     If the resulting grid is 1x1, it provides no targeting value and we return None (refusal).
     """
-    diag_px = math.hypot(screen_w_px, screen_h_px)
-    if screen_diag_mm <= 0:
+    radius_px = uncertainty_radius_px(
+        acc_deg, viewing_dist_mm, screen_w_px, screen_h_px, screen_diag_mm)
+    if radius_px is None:
         return None
-    px_per_mm = diag_px / screen_diag_mm
-    
-    # Uncertainty radius in mm = viewing_distance * tan(accuracy in radians)
-    radius_mm = viewing_dist_mm * math.tan(math.radians(acc_deg))
-    radius_px = radius_mm * px_per_mm
-    
+
     cell_size = radius_px * cell_size_radii
-    
     if cell_size <= 0:
         return None
-        
+
     cols = max(1, int(screen_w_px / cell_size))
     rows = max(1, int(screen_h_px / cell_size))
     
@@ -121,7 +136,8 @@ class StateMachine:
         dispatcher,
         capture_backend: ScreenCapture,
         input_backend=None,
-        recalibrator=None
+        recalibrator=None,
+        reserved_zones: Optional[Dict[str, Dict[str, float]]] = None
     ):
         self.state = "IDLE"
         self.screen_w = screen_w
@@ -146,11 +162,13 @@ class StateMachine:
         self.latest_features = None
         
         self.is_paused = False
-        from engine.scroll import ScrollController
-        self.scroll_controller = ScrollController(screen_h, input_backend)
+        self.shutdown_requested = False
+        self.reserved_zones = reserved_zones or {}
+        self.scroll_controller = ScrollController(
+            screen_h, input_backend, screen_w=screen_w, reserved_zones=self.reserved_zones)
 
     def process_event(self, event: InteractionEvent):
-        # We only consider these events for timeout tracking
+        # Gaze movement alone does not defer the idle timeout; only deliberate input does.
         if event.event_type in (EventType.GESTURE.value, EventType.DWELL_COMPLETE.value, EventType.GAZE_MOVE.value):
             if event.event_type != EventType.GAZE_MOVE.value:
                 self.last_input_time = event.timestamp
@@ -172,7 +190,6 @@ class StateMachine:
                 if self.state == "IDLE":
                     self.enter_grid(event.timestamp)
                 elif self.state in ("ZOOM1", "ZOOM2"):
-                    # The radial menu center is the coordinate where ENGAGE happened
                     self.enter_radial(event.x, event.y, event.timestamp)
             elif event.role == "CANCEL":
                 self.step_back(event.timestamp)
@@ -218,8 +235,14 @@ class StateMachine:
                             timestamp=event.timestamp
                         ))
                     elif action == "quit":
-                        import sys
-                        sys.exit(0)
+                        # Signalled rather than exited in place: this runs inside the event
+                        # dispatch, and terminating there would skip releasing the camera, the
+                        # capture surface and the socket. The run loop performs the shutdown.
+                        self.shutdown_requested = True
+                        self.dispatcher.dispatch(InteractionEvent(
+                            event_type=EventType.SHUTDOWN.value,
+                            timestamp=event.timestamp
+                        ))
 
     def _map_to_orig(self, px, py, rect):
         px_ratio = px / self.screen_w
@@ -260,7 +283,6 @@ class StateMachine:
         self.grid_cols, self.grid_rows = grid
         self.cells = compute_cells(self.screen_w, self.screen_h, self.grid_cols, self.grid_rows)
         
-        # Capture and freeze screen
         img = self.capture.capture()
         if cv2 is not None:
             _, buf = cv2.imencode('.jpg', img, [cv2.IMWRITE_JPEG_QUALITY, 80])
@@ -291,9 +313,13 @@ class StateMachine:
         self.resolved_point = (x, y)
         self.change_state("RESOLVED", timestamp)
 
+    def radial_deadzone_px(self) -> float:
+        radius = uncertainty_radius_px(
+            self.acc_deg, self.viewing_dist_mm, self.screen_w, self.screen_h, self.screen_diag_mm)
+        return radius if radius else 0.0
+
     def step_back(self, timestamp: float):
         if self.state == "RADIAL":
-            # If we cancel radial, we go back to IDLE
             self.change_state("IDLE", timestamp)
         elif self.state == "RESOLVED":
             self.change_state("ZOOM2", timestamp)
@@ -340,15 +366,14 @@ class StateMachine:
             # The whole screen is a single zone for selecting the point
             return "zoom_point"
         elif self.state == "RADIAL" and self.resolved_point:
-            # We assume fx, fy is now in original screen coords?
-            # Wait, no. The overlay clears the zoom in RADIAL state.
-            # So the user looks at the wedge.
+            # The overlay clears the magnified view on entering RADIAL, so the wedges are laid out
+            # in screen coordinates around the resolved point and fx, fy compare directly.
             dx = fx - self.resolved_point[0]
             dy = fy - self.resolved_point[1]
-            if dx == 0 and dy == 0:
-                return None
             distance = math.hypot(dx, dy)
-            if distance < 50: # deadzone
+            # Inside one uncertainty radius the direction from the centre is indistinguishable
+            # from noise, so no wedge is reported rather than an arbitrary one.
+            if distance < self.radial_deadzone_px():
                 return None
             angle = (math.degrees(math.atan2(dy, dx)) + 360) % 360
             wedges = ["left_click", "right_click", "double_click", "middle_click", "drag_start", "drag_end", "cancel"]
