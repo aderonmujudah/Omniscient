@@ -71,6 +71,10 @@ class BaseInputBackend(InputBackend):
         self._inject_mouse([MouseInput(x, y, MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE)])
 
     def click(self, x: float, y: float, button: str = "left", count: int = 1) -> None:
+        import logging
+        logger = logging.getLogger(__name__)
+        logger.info(f"Executing {button}-click (count={count}) at ({x}, {y})")
+        
         down_flag, up_flag = self._get_button_flags(button)
         inputs = [MouseInput(x, y, MOUSEEVENTF_MOVE | MOUSEEVENTF_ABSOLUTE)]
         for _ in range(count):

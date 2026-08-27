@@ -52,6 +52,14 @@ class WindowsInput(BaseInputBackend):
     Windows input backend using SendInput.
     """
     def __init__(self):
+        try:
+            ctypes.windll.shcore.SetProcessDpiAwareness(2) # PROCESS_PER_MONITOR_DPI_AWARE
+        except AttributeError:
+            try:
+                ctypes.windll.user32.SetProcessDPIAware()
+            except AttributeError:
+                pass
+                
         self.screen_width = user32.GetSystemMetrics(0)
         self.screen_height = user32.GetSystemMetrics(1)
 
@@ -72,8 +80,12 @@ class WindowsInput(BaseInputBackend):
             c_inputs[i].union.mi.time = 0
             c_inputs[i].union.mi.dwExtraInfo = None
             
-        user32.SendInput(len(c_inputs), ctypes.byref(c_inputs), ctypes.sizeof(INPUT))
-        
+        ret = user32.SendInput(len(c_inputs), ctypes.byref(c_inputs), ctypes.sizeof(INPUT))
+        if ret != len(c_inputs):
+            import ctypes
+            import logging
+            logger = logging.getLogger(__name__)
+            logger.error(f"SendInput failed. Expected {len(c_inputs)}, got {ret}. Error: {ctypes.GetLastError()}")        
     def _inject_keyboard(self, inputs: List[KeyboardInput]) -> None:
         c_inputs = (INPUT * len(inputs))()
         for i, inp in enumerate(inputs):
