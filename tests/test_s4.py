@@ -161,8 +161,12 @@ def test_s4_cursor_position_math_against_replayed_session():
     dispatcher.subscribe(lambda e: publisher.publish_event(e.to_dict()))
     
     source.start()
-    for sample in source.iter_samples():
-        emitter.process_sample(sample, 500.0, 500.0)
-        break
-        
+    samples = list(source.iter_samples())
+    if samples:
+        sample = samples[0]
+        for i in range(5):
+            # increment timestamp so filters don't get stuck
+            sample.t += 0.033
+            emitter.process_sample(sample, 500.0, 500.0)
+            
     assert any(e["event_type"] == "GAZE_MOVE" for e in published_events)

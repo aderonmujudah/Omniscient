@@ -9,6 +9,7 @@ from engine.events.gestures.registry import GestureRegistry
 from engine.events.interaction import EventType, InteractionEvent
 from engine.filtering.classifier import SampleClassifier, SampleState
 from engine.filtering.one_euro import OneEuroFilter
+from engine.filtering.ema import EMAFilter
 from engine.sources.base import GazeSample
 
 logger = logging.getLogger(__name__)
@@ -50,6 +51,10 @@ class InteractionEmitter:
         self._dwell = dwell
         self._zone_resolver = zone_resolver
 
+        self._blink_filter_left = EMAFilter(rate=30.0, cutoff=5.0)
+        self._blink_filter_right = EMAFilter(rate=30.0, cutoff=5.0)
+        self._blink_score_filter = EMAFilter(rate=30.0, cutoff=5.0)
+
         self._tracking_ok = True
         self._in_fixation = False
 
@@ -79,13 +84,25 @@ class InteractionEmitter:
         fx, fy = self._filter(gaze_x, gaze_y, sample.t)
 
         ear = sample.ear or {}
+        filtered_ear = None
+        if "left" in ear and "right" in ear:
+            filtered_ear = {
+                "left": self._blink_filter_left(ear["left"], sample.t),
+                "right": self._blink_filter_right(ear["right"], sample.t)
+            }
+            sample.ear = filtered_ear
+        
+        if sample.blink_score is not None:
+            sample.blink_score = self._blink_score_filter(sample.blink_score, sample.t)
+
         state, completed = self._classifier.classify(
             ok=sample.ok,
-            ear_left=ear.get("left"),
-            ear_right=ear.get("right"),
+            ear_left=filtered_ear.get("left") if filtered_ear else None,
+            ear_right=filtered_ear.get("right") if filtered_ear else None,
             gaze_x=fx,
             gaze_y=fy,
             timestamp=sample.t,
+            blink_score=sample.blink_score,
         )
 
         if not hasattr(self, '_gaze_buffer'):
@@ -107,7 +124,7 @@ class InteractionEmitter:
         # Gestures run on the calibrated position rather than the smoothed one. The filter
         # trades lag for stability, which is correct for a cursor and wrong for a boundary
         # crossing or a displacement measured over a few frames.
-        for gesture in self._registry.process_sample(sample, gaze_x, gaze_y):
+        for gesture in self._registry.process_sample(sample, gaze_x, gaze_y, self._in_fixation):
             events.append(InteractionEvent(
                 event_type=EventType.GESTURE.value,
                 timestamp=gesture.timestamp,
@@ -182,6 +199,9 @@ class InteractionEmitter:
 
     def reset(self) -> None:
         self._filter.reset()
+        self._blink_filter_left.reset()
+        self._blink_filter_right.reset()
+        self._blink_score_filter.reset()
         self._classifier.reset()
         self._registry.reset()
         if self._dwell is not None:

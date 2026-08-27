@@ -13,6 +13,7 @@ from engine.events.gestures.extended_closure import ExtendedClosureDetector
 from engine.events.gestures.off_screen_glance import OffScreenGlanceDetector
 from engine.events.gestures.gaze_stroke import GazeStrokeDetector
 from engine.events.gestures.reserved_zone_dwell import ReservedZoneDwellDetector
+from engine.events.gestures.double_blink import DoubleBlinkDetector
 
 logger = logging.getLogger(__name__)
 
@@ -33,6 +34,7 @@ _DETECTOR_FACTORIES = {
         **({"closure_min_s": kw["threshold_ms"] / 1000.0} if kw.get("threshold_ms") else {}),
     ),
     "extended_closure": lambda kw: ExtendedClosureDetector(**_closure_bounds(kw)),
+    "double_blink": lambda kw: DoubleBlinkDetector(**_closure_bounds(kw)),
     "off_screen_glance": lambda kw: OffScreenGlanceDetector(
         screen_w=kw["screen_w"], screen_h=kw["screen_h"]
     ),
@@ -129,7 +131,7 @@ class GestureRegistry:
             )
 
     def process_sample(
-        self, sample: GazeSample, gaze_x: float, gaze_y: float
+        self, sample: GazeSample, gaze_x: float, gaze_y: float, in_fixation: bool = True
     ) -> List[GestureEvent]:
         """Process a sample through all active detectors.
 
@@ -137,6 +139,7 @@ class GestureRegistry:
             sample: The current gaze sample.
             gaze_x: Calibrated horizontal screen coordinate (pixels).
             gaze_y: Calibrated vertical screen coordinate (pixels).
+            in_fixation: Whether the user is currently holding a fixation.
 
         Returns:
             List of GestureEvents (typically 0 or 1).
@@ -145,6 +148,8 @@ class GestureRegistry:
 
         for det in self._gesture_detectors:
             det.update_gaze_position(gaze_x, gaze_y)
+            if hasattr(det, "in_fixation"):
+                det.in_fixation = in_fixation
             result = det.process_sample(sample)
             if result is not None:
                 lx, ly = det.latched_position

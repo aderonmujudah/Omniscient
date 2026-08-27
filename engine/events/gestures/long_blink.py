@@ -54,6 +54,7 @@ class LongBlinkDetector:
         self._latched_x: float = 0.0
         self._latched_y: float = 0.0
         self._was_closed: bool = False
+        self.in_fixation: bool = True
         import collections
         self._gaze_history = collections.deque(maxlen=4)
 
@@ -87,11 +88,14 @@ class LongBlinkDetector:
         closed = self._is_closed(sample)
 
         if closed and not self._was_closed:
-            self._closure_start_t = sample.t
-            if self._gaze_history:
-                self._latched_x, self._latched_y = self._gaze_history[0]
+            if not self.in_fixation:
+                closed = False
             else:
-                self._latched_x, self._latched_y = 0.0, 0.0
+                self._closure_start_t = sample.t
+                if self._gaze_history:
+                    self._latched_x, self._latched_y = self._gaze_history[-1]
+                else:
+                    self._latched_x, self._latched_y = 0.0, 0.0
 
         if not closed and self._was_closed and self._closure_start_t is not None:
             duration_s = sample.t - self._closure_start_t
@@ -110,11 +114,16 @@ class LongBlinkDetector:
         self._gaze_history.append((x, y))
 
     def _is_closed(self, sample: GazeSample) -> bool:
-        if not sample.ok or sample.ear is None:
+        if not sample.ok:
             return False
-        # A closure under way is held open to the reopen bound, so the eye must be
-        # demonstrably open again to end it rather than merely ambiguous.
+            
         bound = self._ear_reopen if self._was_closed else self._ear_threshold
+        
+        if sample.blink_score is not None:
+            return sample.blink_score > max(0.5, 1.0 - bound)
+            
+        if sample.ear is None:
+            return False
         return sample.ear["left"] < bound and sample.ear["right"] < bound
 
     def reset(self) -> None:

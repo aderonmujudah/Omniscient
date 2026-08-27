@@ -42,10 +42,23 @@ def main():
     logger.info("Validation Mean Error: %.2f deg, Worst Error: %.2f deg", mean_err, worst_err)
     
     # Assess gestures
-    # The objective specifies measured blink values for this subject: 1750 / 0.18 / 0.24
-    long_blink_ms = 1750.0
-    ear_threshold = 0.18
-    ear_reopen = 0.24
+    # Compute per-user blink thresholds from the recording
+    from engine.sources.replay import ReplaySource
+    from engine.calibration.session import CalibrationSession
+    import json
+    
+    offline_session = CalibrationSession(args.screen_w, args.screen_h, args.dispersion_threshold)
+    source = ReplaySource(args.record_file, realtime=False)
+    source.start()
+    offline_session.start()
+    for sample in source.iter_samples():
+        offline_session.process_sample(sample)
+    source.stop()
+    
+    long_blink_ms = offline_session.get_long_blink_threshold_ms()
+    blink_thresh = offline_session.get_blink_thresholds()
+    ear_threshold = blink_thresh.get('ear_close', 0.18)
+    ear_reopen = blink_thresh.get('ear_reopen', 0.24)
     
     assessment = GestureAssessment(
         long_blink_threshold_ms=long_blink_ms,

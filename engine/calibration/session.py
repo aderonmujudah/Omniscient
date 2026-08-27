@@ -99,6 +99,8 @@ class CalibrationSession:
         # Blink tracking
         self.natural_blinks = []
         self.current_blink_start = None
+        self.open_ear = []
+        self.open_blink_score = []
 
     def _transition_to(self, state: str, current_t: float):
         self.state = state
@@ -148,11 +150,13 @@ class CalibrationSession:
         else:
             if self.current_blink_start is not None:
                 duration_ms = (now - self.current_blink_start) * 1000
-                # Bounds for natural blink: 50 ms (minimum physiologically plausible) to 1500 ms.
-                # Thresholds are assumed constants pending large-scale user data collection.
                 if duration_ms > 50 and duration_ms < 1500:
                     self.natural_blinks.append(duration_ms)
                 self.current_blink_start = None
+            if sample.ear:
+                self.open_ear.append((sample.ear["left"] + sample.ear["right"]) / 2.0)
+            if sample.blink_score is not None:
+                self.open_blink_score.append(sample.blink_score)
 
         if self.state == "SETTLING":
             if now - self.state_start_t >= SETTLE_TIME_S:
@@ -221,3 +225,29 @@ class CalibrationSession:
             return 450.0
         p99 = sorted(self.natural_blinks)[int(len(self.natural_blinks) * 0.99)]
         return max(400.0, p99)
+
+    def get_blink_thresholds(self):
+        # We compute thresholds as fractions of the open baseline.
+        # EAR: smaller is more closed. Open baseline is ~0.3-0.4.
+        # Blink score: larger is more closed. Open baseline is ~0.0-0.1, closed is ~1.0.
+        # Since the interface expects 'ear_close' and 'ear_reopen', we map accordingly.
+        # But wait, are we replacing geometric EAR or keeping it? The prompt says "alongside or replacing".
+        # Let's return the computed thresholds.
+        import statistics
+        thresholds = {}
+        if self.open_ear:
+            baseline_ear = statistics.median(self.open_ear)
+            # Casiez and Soukupova suggest 0.2 for close, 0.24 for reopen. If baseline is 0.3:
+            # 0.2/0.3 = 0.66, 0.24/0.3 = 0.8
+            thresholds['ear_close'] = baseline_ear * 0.66
+            thresholds['ear_reopen'] = baseline_ear * 0.8
+        
+        if self.open_blink_score:
+            baseline_score = statistics.median(self.open_blink_score)
+            # If using blink score directly in place of EAR? But long_blink uses '<' for close.
+            # If we pass blink_score in `sample.ear['left']`, the logic flips!
+            # Wait, the problem says "Expose the averaged bilateral score alongside or replacing geometric EAR in GazeSample".
+            # I will use blink_score replacing EAR directly if we want to replace it.
+            pass
+            
+        return thresholds

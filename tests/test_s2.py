@@ -283,8 +283,9 @@ def test_assessment_standalone_rerun():
     while assess.state != "DONE":
         assess.user_declines()
         
-    # Without a gaze position only the two closure gestures can be presented.
-    assert len(assess.results) == 2
+    # Without a gaze position only the closure gestures can be presented.
+    # Previously 2 (long_blink, extended_closure), now 3 with double_blink.
+    assert len(assess.results) == 3
     
     # Rerun
     assess.start()

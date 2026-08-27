@@ -4,6 +4,7 @@ from engine.events.gestures.extended_closure import ExtendedClosureDetector
 from engine.events.gestures.off_screen_glance import OffScreenGlanceDetector
 from engine.events.gestures.smooth_pursuit import SmoothPursuitDetector
 from engine.events.gestures.gaze_stroke import GazeStrokeDetector
+from engine.events.gestures.double_blink import DoubleBlinkDetector
 
 logger = logging.getLogger(__name__)
 
@@ -13,6 +14,7 @@ logger = logging.getLogger(__name__)
 # every attempt would be recorded as a failure the user caused.
 CANDIDATE_GESTURES = [
     "long_blink",
+    "double_blink",
     "extended_closure",
     "off_screen_glance",
     "smooth_pursuit",
@@ -44,6 +46,7 @@ class GestureAssessment:
                 **closure_kw,
                 closure_min_s=long_blink_threshold_ms / 1000.0,
             ),
+            "double_blink": DoubleBlinkDetector(**closure_kw),
             "extended_closure": ExtendedClosureDetector(**closure_kw),
             "off_screen_glance": OffScreenGlanceDetector(screen_w=screen_w, screen_h=screen_h),
             "smooth_pursuit": SmoothPursuitDetector(),
@@ -235,7 +238,7 @@ class GestureAssessment:
         
         preference = [
             name for name in
-            ["long_blink", "off_screen_glance", "gaze_stroke", "extended_closure", "smooth_pursuit"]
+            ["double_blink", "long_blink", "off_screen_glance", "gaze_stroke", "extended_closure", "smooth_pursuit"]
             if name in self.candidates
         ]
         

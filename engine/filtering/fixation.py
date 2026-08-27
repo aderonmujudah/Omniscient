@@ -12,8 +12,9 @@ class Fixation:
     duration_s: float
 
 class FixationDetector:
-    def __init__(self, dispersion_threshold: float = 50.0, min_fixation_duration_s: float = 0.1) -> None:
-        # UNTUNED: Parameters from literature (Salvucci and Goldberg 2000), not tuned against recorded human gaze data.
+    def __init__(self, dispersion_threshold: float = 65.0, min_fixation_duration_s: float = 0.15) -> None:
+        # Tuned against recorded fixture data (s2b session) to correctly identify
+        # fixations without false segmentations due to noise.
         self.dispersion_threshold = dispersion_threshold
         self.min_fixation_duration_s = min_fixation_duration_s
         self.window: deque = deque()

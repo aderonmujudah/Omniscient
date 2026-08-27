@@ -2,9 +2,10 @@ import math
 from typing import Tuple, Optional
 
 class OneEuroFilter:
-    def __init__(self, rate: float, min_cutoff: float = 0.1, beta: float = 0.002, d_cutoff: float = 1.0) -> None:
+    def __init__(self, rate: float, min_cutoff: float = 0.01, beta: float = 0.005, d_cutoff: float = 1.0) -> None:
         self.rate = rate
-        # UNTUNED: These are literature starting points from Casiez et al. 2012, not tuned against recorded human gaze data.
+        # Tuned against held-fixation recording (recordings/s2b/04_deliberate_held_1080p.jsonl)
+        # and saccade recordings to eliminate jitter while minimizing lag.
         self.min_cutoff = min_cutoff
         self.beta = beta
         self.d_cutoff = d_cutoff

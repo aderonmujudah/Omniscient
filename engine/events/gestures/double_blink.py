@@ -1,37 +1,23 @@
 from typing import Optional
 from engine.sources.base import GazeSample
 
-class ExtendedClosureDetector:
-    # Bounds moved from [0.8, 2.0] on 2026-08-27 to stay disjoint from the long-blink band,
-    # which now reaches 3.0 s against a measured deliberate closure of 1964 to 2600 ms. Under
-    # the former bounds both detectors accepted the same closure and fired on it together.
-    #
-    # UNMEASURED. No closure longer than the cued two-second hold was recorded, so only the
-    # lower edge of this band derives from an observation of the subject.
-    CLOSURE_MIN_S: float = 3.1
-    CLOSURE_MAX_S: float = 6.0
-
-    # Held above the closing bound for the reason given on LongBlinkDetector: a lone bound is
-    # crossed repeatedly by the EAR of a closure that is genuinely held.
-    DEFAULT_EAR_REOPEN: float = 0.24
-
-    # Measured on the target subject; see LongBlinkDetector.
-    DEFAULT_EAR_CLOSE: float = 0.18
-
-    def __init__(self, ear_threshold: float = DEFAULT_EAR_CLOSE,
-                 ear_reopen: float = DEFAULT_EAR_REOPEN) -> None:
+class DoubleBlinkDetector:
+    def __init__(self, interval_max_s: float = 0.5, ear_threshold: float = 0.18, ear_reopen: float = 0.24) -> None:
+        self.interval_max_s = interval_max_s
         self._ear_threshold = ear_threshold
         self._ear_reopen = max(ear_reopen, ear_threshold)
-        self._closure_start_t: Optional[float] = None
+        
+        self._was_closed = False
+        self._last_reopen_t: Optional[float] = None
+        
         self._latched_x: float = 0.0
         self._latched_y: float = 0.0
-        self._was_closed: bool = False
         import collections
         self._gaze_history = collections.deque(maxlen=4)
 
     @property
     def name(self) -> str:
-        return "extended_closure"
+        return "double_blink"
 
     @property
     def requires_gaze_position(self) -> bool:
@@ -39,7 +25,7 @@ class ExtendedClosureDetector:
 
     @property
     def can_fire(self) -> bool:
-        return self.CLOSURE_MIN_S < self.CLOSURE_MAX_S
+        return True
 
     @property
     def latched_position(self) -> tuple[float, float]:
@@ -47,23 +33,23 @@ class ExtendedClosureDetector:
 
     def process_sample(self, sample: GazeSample) -> Optional[str]:
         closed = self._is_closed(sample)
-        
+
         if closed and not self._was_closed:
-            self._closure_start_t = sample.t
+            # Blink onset
             if self._gaze_history:
                 self._latched_x, self._latched_y = self._gaze_history[-1]
             else:
                 self._latched_x, self._latched_y = 0.0, 0.0
-        
-        if not closed and self._was_closed and self._closure_start_t is not None:
-            duration_s = sample.t - self._closure_start_t
-            self._closure_start_t = None
-            self._was_closed = False
-            
-            if self.CLOSURE_MIN_S <= duration_s <= self.CLOSURE_MAX_S:
-                return self.name
-            return None
-        
+                
+            if self._last_reopen_t is not None:
+                if sample.t - self._last_reopen_t <= self.interval_max_s:
+                    self._last_reopen_t = None
+                    self._was_closed = True
+                    return self.name
+
+        if not closed and self._was_closed:
+            self._last_reopen_t = sample.t
+
         self._was_closed = closed
         return None
 
@@ -84,8 +70,8 @@ class ExtendedClosureDetector:
         return sample.ear["left"] < bound and sample.ear["right"] < bound
 
     def reset(self) -> None:
-        self._closure_start_t = None
         self._was_closed = False
+        self._last_reopen_t = None
         self._latched_x = 0.0
         self._latched_y = 0.0
         self._gaze_history.clear()

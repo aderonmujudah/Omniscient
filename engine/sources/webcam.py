@@ -170,6 +170,12 @@ class WebcamSource(GazeSource):
                     "right": compute_ear(right_top, right_bottom, right_inner, right_outer, w_img, h_img)
                 }
 
+                if detection_result.face_blendshapes:
+                    blendshapes = {cat.category_name: cat.score for cat in detection_result.face_blendshapes[0]}
+                    left_blink = blendshapes.get("eyeBlinkLeft", 0.0)
+                    right_blink = blendshapes.get("eyeBlinkRight", 0.0)
+                    sample.blink_score = (left_blink + right_blink) / 2.0
+
                 sample.ipd_px = compute_ipd_px(left_iris, right_iris, w_img, h_img)
                 sample.conf = 1.0
 
