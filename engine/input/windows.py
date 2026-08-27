@@ -82,7 +82,6 @@ class WindowsInput(BaseInputBackend):
             
         ret = user32.SendInput(len(c_inputs), ctypes.byref(c_inputs), ctypes.sizeof(INPUT))
         if ret != len(c_inputs):
-            import ctypes
             import logging
             logger = logging.getLogger(__name__)
             logger.error(f"SendInput failed. Expected {len(c_inputs)}, got {ret}. Error: {ctypes.GetLastError()}")        

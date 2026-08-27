@@ -88,10 +88,19 @@ class InteractionEmitter:
             timestamp=sample.t,
         )
 
-        if state is not SampleState.BLINK:
-            events.append(InteractionEvent(
-                event_type=EventType.GAZE_MOVE.value, timestamp=sample.t, x=fx, y=fy,
-            ))
+        if not hasattr(self, '_gaze_buffer'):
+            self._gaze_buffer = []
+
+        if state is SampleState.BLINK:
+            self._gaze_buffer.clear()
+        else:
+            self._gaze_buffer.append((sample.t, fx, fy))
+            # 4 frames of lag at 30fps = ~133ms. Hides the eyelid closure darting.
+            if len(self._gaze_buffer) > 4:
+                emit_t, emit_x, emit_y = self._gaze_buffer.pop(0)
+                events.append(InteractionEvent(
+                    event_type=EventType.GAZE_MOVE.value, timestamp=emit_t, x=emit_x, y=emit_y,
+                ))
 
         events.extend(self._fixation_events(state, completed, sample.t))
 

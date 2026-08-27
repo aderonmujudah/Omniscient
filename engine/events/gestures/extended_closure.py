@@ -26,8 +26,8 @@ class ExtendedClosureDetector:
         self._latched_x: float = 0.0
         self._latched_y: float = 0.0
         self._was_closed: bool = False
-        self._last_gaze_x: float = 0.0
-        self._last_gaze_y: float = 0.0
+        import collections
+        self._gaze_history = collections.deque(maxlen=4)
 
     @property
     def name(self) -> str:
@@ -50,8 +50,10 @@ class ExtendedClosureDetector:
         
         if closed and not self._was_closed:
             self._closure_start_t = sample.t
-            self._latched_x = self._last_gaze_x
-            self._latched_y = self._last_gaze_y
+            if self._gaze_history:
+                self._latched_x, self._latched_y = self._gaze_history[0]
+            else:
+                self._latched_x, self._latched_y = 0.0, 0.0
         
         if not closed and self._was_closed and self._closure_start_t is not None:
             duration_s = sample.t - self._closure_start_t
@@ -66,8 +68,7 @@ class ExtendedClosureDetector:
         return None
 
     def update_gaze_position(self, x: float, y: float) -> None:
-        self._last_gaze_x = x
-        self._last_gaze_y = y
+        self._gaze_history.append((x, y))
 
     def _is_closed(self, sample: GazeSample) -> bool:
         if not sample.ok or sample.ear is None:
@@ -82,3 +83,4 @@ class ExtendedClosureDetector:
         self._was_closed = False
         self._latched_x = 0.0
         self._latched_y = 0.0
+        self._gaze_history.clear()
